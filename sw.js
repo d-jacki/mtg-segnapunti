@@ -1,4 +1,4 @@
-const CACHE_NAME = 'segnapunti-v2';
+const CACHE_NAME = 'segnapunti-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -12,7 +12,9 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+      // cache: 'reload' bypassa la HTTP cache del browser: bumpando CACHE_NAME
+      // si è sicuri di ri-scaricare la versione nuova, non quella in cache
+      .then(cache => cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });

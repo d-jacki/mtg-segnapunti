@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0d12">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -178,6 +178,7 @@ input { font: inherit; }
   transition: color 0.2s;
 }
 .p-life.low { color: var(--danger); }
+.p-life.long { font-size: min(30cqw, 50cqh); }
 .p-badges {
   position: absolute;
   bottom: 6cqh;
@@ -580,9 +581,22 @@ function isDead(p) {
 }
 
 function serialize(state) { return JSON.stringify(state); }
+/* Oltre a validare, normalizza salvataggi vecchi o corrotti riempiendo i campi mancanti */
 function deserialize(str) {
   const s = JSON.parse(str);
   if (!s || !Array.isArray(s.players) || s.players.length < 2) throw new Error('Stato non valido');
+  if (typeof s.startLife !== 'number') s.startLife = 40;
+  if (typeof s.startedAt !== 'number') s.startedAt = Date.now();
+  if (s.monarch === undefined) s.monarch = null;
+  if (s.initiative === undefined) s.initiative = null;
+  s.players.forEach((p, i) => {
+    p.id = i;
+    if (typeof p.name !== 'string' || !p.name) p.name = 'Giocatore ' + (i + 1);
+    if (!COLORS.includes(p.color)) p.color = COLORS[i % COLORS.length];
+    if (typeof p.life !== 'number') p.life = s.startLife;
+    ['poison', 'energy', 'exp', 'tax'].forEach(k => { if (typeof p[k] !== 'number') p[k] = 0; });
+    if (!p.cmd || typeof p.cmd !== 'object') p.cmd = {};
+  });
   return s;
 }
 
@@ -655,7 +669,16 @@ function layoutRows(count) {
   }
 }
 
+/* Azzera timer e accumulatori dei tap: il board sta per essere ricostruito
+   e i vecchi riferimenti a elementi/valori non sono più validi */
+function resetTapState() {
+  for (const k in deltaAcc) { clearTimeout(deltaAcc[k].timer); delete deltaAcc[k]; }
+  for (const k in holdTimers) { clearTimeout(holdTimers[k].delay); clearInterval(holdTimers[k].interval); delete holdTimers[k]; }
+  lastBurst = { pid: -1, time: 0 };
+}
+
 function buildBoard() {
+  resetTapState();
   const board = $('board');
   board.innerHTML = '';
   const rows = layoutRows(state.players.length);
@@ -675,8 +698,8 @@ function buildBoard() {
         '<div class="p-badges"></div>' +
         '<div class="delta"></div>' +
         '<div class="p-skull">&#128128;</div>' +
-        '<div class="zone minus"><span class="hint">&minus;</span></div>' +
-        '<div class="zone plus"><span class="hint">+</span></div>' +
+        '<button class="zone minus" aria-label="Togli vita"><span class="hint">&minus;</span></button>' +
+        '<button class="zone plus" aria-label="Aggiungi vita"><span class="hint">+</span></button>' +
         '<button class="p-gear" aria-label="Impostazioni giocatore">&#9881;</button>';
       el.querySelector('.p-gear').addEventListener('click', () => openPlayerSheet(pid));
       bindZone(el.querySelector('.zone.minus'), pid, -1);
@@ -700,6 +723,7 @@ function renderPanel(pid) {
   const lifeEl = el.querySelector('.p-life');
   lifeEl.textContent = p.life;
   lifeEl.classList.toggle('low', p.life > 0 && p.life <= 5);
+  lifeEl.classList.toggle('long', String(p.life).length > 2);
   const badges = [];
   const cmdMax = maxCmdDmg(p);
   if (cmdMax > 0) badges.push('<span class="badge' + (cmdMax >= LETHAL_CMD ? ' warn' : '') + '">&#9876;&#65039; ' + cmdMax + '</span>');
@@ -735,34 +759,44 @@ function showDelta(pid, delta) {
 
 function bindZone(zone, pid, delta) {
   const key = pid + ':' + delta;
+  const stop = () => {
+    const t = holdTimers[key];
+    if (t) { clearTimeout(t.delay); clearInterval(t.interval); delete holdTimers[key]; }
+  };
   const start = e => {
     e.preventDefault();
+    stop(); // un secondo dito sulla stessa zona non deve orfanare il timer precedente
     tapLife(pid, delta);
     const t = holdTimers[key] = {};
     t.delay = setTimeout(() => {
       t.interval = setInterval(() => tapLife(pid, delta), 110);
     }, 450);
   };
-  const stop = () => {
-    const t = holdTimers[key];
-    if (t) { clearTimeout(t.delay); clearInterval(t.interval); delete holdTimers[key]; }
-  };
   zone.addEventListener('pointerdown', start);
   zone.addEventListener('pointerup', stop);
   zone.addEventListener('pointercancel', stop);
   zone.addEventListener('pointerleave', stop);
+  zone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tapLife(pid, delta); }
+  });
   zone.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-/* ================= Modali ================= */
-function openSheet(html, flip) {
+/* ================= Modali =================
+   #sheet ha UN SOLO listener click (registrato in boot) che delega a
+   sheetHandler: ogni apertura sostituisce l'handler invece di aggiungerne
+   uno nuovo, così le azioni non vengono mai applicate più volte. */
+let sheetHandler = null;
+
+function openSheet(html, flip, onAction) {
   const sheet = $('sheet');
   sheet.innerHTML = html;
   sheet.classList.toggle('flip', !!flip);
+  sheetHandler = onAction || null;
   $('overlay').classList.add('open');
   return sheet;
 }
-function closeSheet() { $('overlay').classList.remove('open'); }
+function closeSheet() { $('overlay').classList.remove('open'); sheetHandler = null; }
 
 function isFlipped(pid) {
   return layoutRows(state.players.length)[0].includes(pid);
@@ -811,22 +845,8 @@ function openPlayerSheet(pid) {
 
   html += '<button class="sheet-close" data-act="close">Chiudi</button>';
 
-  const sheet = openSheet(html, isFlipped(pid));
-
-  sheet.querySelector('#nameInput').addEventListener('input', e => {
-    pushHistoryOnce();
-    p.name = e.target.value.trim() || 'Giocatore ' + (pid + 1);
-    renderPanel(pid);
-    save();
-  });
-
-  let namePushed = false;
-  function pushHistoryOnce() { if (!namePushed) { pushHistory(); namePushed = true; } }
-
-  sheet.addEventListener('click', e => {
-    const act = e.target.closest('[data-act]');
-    if (!act) return;
-    const parts = act.dataset.act.split(':');
+  const sheet = openSheet(html, isFlipped(pid), act => {
+    const parts = act.split(':');
     if (parts[0] === 'close') { closeSheet(); return; }
     pushHistory();
     if (parts[0] === 'cmd') applyCmdDmg(state, pid, Number(parts[1]), Number(parts[2]));
@@ -837,6 +857,14 @@ function openPlayerSheet(pid) {
     renderAll();
     save();
     openPlayerSheet(pid); // ridisegna la scheda con i valori aggiornati
+  });
+
+  let namePushed = false;
+  sheet.querySelector('#nameInput').addEventListener('input', e => {
+    if (!namePushed) { pushHistory(); namePushed = true; }
+    p.name = e.target.value.trim() || 'Giocatore ' + (pid + 1);
+    renderPanel(pid);
+    save();
   });
 }
 
@@ -849,11 +877,7 @@ function openMenuSheet() {
     '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
     '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
-  const sheet = openSheet(html, false);
-  sheet.addEventListener('click', e => {
-    const act = e.target.closest('[data-act]');
-    if (!act) return;
-    const a = act.dataset.act;
+  openSheet(html, false, a => {
     if (a === 'close') closeSheet();
     else if (a === 'rematch') {
       if (!confirm('Ricominciare la partita con gli stessi giocatori?')) return;
@@ -874,7 +898,8 @@ function openMenuSheet() {
     } else if (a === 'reset') {
       if (!confirm('Azzerare tutto e tornare al setup?')) return;
       clearSaved();
-      history = [];
+      setupCount = 4;
+      setupLife = 40;
       showSetup();
       closeSheet();
     }
@@ -891,12 +916,9 @@ function openDiceSheet() {
     '<button class="menu-btn" data-act="starter">&#127919; Chi inizia?</button>' +
     '<div id="diceResult"><span class="dr-sub">Scegli un dado</span></div>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
-  const sheet = openSheet(html, false);
   let anim = null;
-  sheet.addEventListener('click', e => {
-    const act = e.target.closest('[data-act]');
-    if (!act) return;
-    const parts = act.dataset.act.split(':');
+  openSheet(html, false, act => {
+    const parts = act.split(':');
     const res = $('diceResult');
     clearInterval(anim);
     if (parts[0] === 'close') { closeSheet(); return; }
@@ -914,12 +936,13 @@ function openDiceSheet() {
         if (++ticks > 8) clearInterval(anim);
       }, 70);
     } else if (parts[0] === 'starter') {
-      const idx = chooseStarter(state.players.length);
-      const p = state.players[idx];
-      res.innerHTML = escapeHtml(p.name) + '<span class="dr-sub">inizia la partita</span>';
+      // Estrae solo tra i giocatori ancora in vita
+      const alive = state.players.filter(pl => !isDead(pl));
+      const pool = alive.length ? alive : state.players;
+      const p = pool[chooseStarter(pool.length)];
       closeSheet();
       toast('Inizia ' + p.name + '!');
-      const panel = $('panel-' + idx);
+      const panel = $('panel-' + p.id);
       panel.classList.remove('starter');
       void panel.offsetWidth;
       panel.classList.add('starter');
@@ -967,6 +990,7 @@ function renderSetup() {
 function showSetup() {
   releaseWakeLock();
   state = null;
+  history = [];
   $('game').hidden = true;
   $('setup').hidden = false;
   renderSetup();
@@ -1010,6 +1034,12 @@ function boot() {
   $('menuBtn').addEventListener('click', openMenuSheet);
   $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeSheet(); });
 
+  // Unico listener per tutte le azioni dei fogli modali (vedi openSheet)
+  $('sheet').addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (act && sheetHandler) sheetHandler(act.dataset.act);
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && state && state.started) requestWakeLock();
   });
@@ -1031,7 +1061,14 @@ function boot() {
   }
 }
 
-if (!IS_TEST) {
+if (IS_TEST) {
+  globalThis.__app = {
+    boot, openPlayerSheet, openMenuSheet, openDiceSheet, closeSheet,
+    setState: s => { state = s; },
+    getState: () => state,
+    getHistory: () => history
+  };
+} else {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 }
