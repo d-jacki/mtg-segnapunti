@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Segnapunti MTG</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  --bg: #0a0d12;
+  --ink: #e8e4da;
+  --ink-dim: #8d8a80;
+  --danger: #ff6161;
+  --hub-bg: #14181f;
+  --line: #262b34;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid #7fbbff; outline-offset: 2px; }
+input { font: inherit; }
+[hidden] { display: none !important; }
+
+/* ---------- Colori mana per giocatore ---------- */
+.mana-W { --p-bg: #262218; --p-glow: #f2e4ba; --p-text: #f7edd3; }
+.mana-U { --p-bg: #0f2236; --p-glow: #6fbbff; --p-text: #d8ecff; }
+.mana-B { --p-bg: #221a2b; --p-glow: #b78fe0; --p-text: #e9dcf6; }
+.mana-R { --p-bg: #301312; --p-glow: #ff8a6b; --p-text: #ffdfd5; }
+.mana-G { --p-bg: #10261a; --p-glow: #7edb9e; --p-text: #dcf5e4; }
+.mana-O { --p-bg: #2a2110; --p-glow: #f5c86b; --p-text: #f8e8c8; }
+
+/* ---------- Setup ---------- */
+#setup {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+  padding: 24px calc(16px + env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+#setup h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(34px, 9vw, 52px);
+  letter-spacing: 0.5px;
+}
+#setup h1 span { color: #f5c86b; }
+.setup-sub {
+  color: var(--ink-dim);
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: -20px;
+}
+.pips { display: flex; gap: 10px; justify-content: center; margin-top: -12px; }
+.pip { width: 14px; height: 14px; border-radius: 50%; }
+.field-label {
+  font-size: 12px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+.choice-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.choice {
+  min-width: 58px;
+  padding: 14px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--hub-bg);
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  transition: transform 0.1s;
+}
+.choice.sel { border-color: #f5c86b; color: #f5c86b; background: #241d10; }
+.choice:active { transform: scale(0.95); }
+#customLife {
+  width: 86px;
+  padding: 14px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--hub-bg);
+  color: var(--ink);
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+#startBtn {
+  margin-top: 4px;
+  padding: 18px 52px;
+  border-radius: 18px;
+  background: #f5c86b;
+  color: #1d1608;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+#startBtn:active { transform: scale(0.97); }
+
+/* ---------- Tavolo ---------- */
+#game { height: 100dvh; position: relative; }
+#board {
+  height: 100%;
+  display: grid;
+  gap: 5px;
+  padding: 5px;
+  padding-top: max(5px, env(safe-area-inset-top));
+  padding-bottom: max(5px, env(safe-area-inset-bottom));
+}
+.row { display: grid; gap: 5px; min-height: 0; }
+
+.panel {
+  position: relative;
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse 90% 65% at 50% 50%, color-mix(in srgb, var(--p-glow) 14%, transparent), transparent 70%),
+    var(--p-bg);
+  color: var(--p-text);
+  overflow: hidden;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.panel.flip { transform: rotate(180deg); }
+
+.p-name {
+  position: absolute;
+  top: 7cqh;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: clamp(11px, 5cqh, 16px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--p-text) 65%, transparent);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.p-life {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: min(38cqw, 56cqh);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 28px color-mix(in srgb, var(--p-glow) 45%, transparent);
+  pointer-events: none;
+  transition: color 0.2s;
+}
+.p-life.low { color: var(--danger); }
+.p-badges {
+  position: absolute;
+  bottom: 6cqh;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: clamp(12px, 6cqh, 17px);
+  pointer-events: none;
+  flex-wrap: wrap;
+  padding: 0 12px;
+}
+.badge { display: inline-flex; align-items: center; gap: 3px; opacity: 0.9; }
+.badge.warn { color: var(--danger); }
+
+/* Zone tap +/- */
+.zone {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 50%;
+  display: flex;
+  align-items: center;
+}
+.zone.minus { left: 0; justify-content: flex-start; }
+.zone.plus { right: 0; justify-content: flex-end; }
+.zone .hint {
+  font-size: clamp(16px, 10cqh, 26px);
+  color: color-mix(in srgb, var(--p-text) 22%, transparent);
+  padding: 0 14px;
+  pointer-events: none;
+}
+.zone:active { background: color-mix(in srgb, var(--p-glow) 8%, transparent); }
+
+/* Chip delta */
+.delta {
+  position: absolute;
+  top: 16cqh;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: Georgia, serif;
+  font-size: clamp(15px, 10cqh, 26px);
+  font-weight: 700;
+  color: var(--p-glow);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.delta.show { opacity: 1; }
+
+/* Bottone impostazioni giocatore */
+.p-gear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 16px;
+  color: color-mix(in srgb, var(--p-text) 55%, transparent);
+  z-index: 2;
+}
+
+/* Morte */
+.panel.dead .p-life, .panel.dead .p-badges, .panel.dead .p-name { opacity: 0.25; }
+.p-skull {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: min(24cqw, 34cqh);
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+.panel.dead .p-skull { display: flex; }
+
+/* ---------- Hub centrale ---------- */
+#hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 8px;
+  background: var(--hub-bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55);
+  z-index: 5;
+}
+.hub-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hub-btn:active { background: #232a35; }
+
+/* ---------- Modali ---------- */
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5,7,10,0.72);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 18px;
+}
+#overlay.open { display: flex; }
+#sheet {
+  width: min(420px, 100%);
+  max-height: 86dvh;
+  overflow-y: auto;
+  background: #12161d;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 20px;
+  -webkit-user-select: none;
+}
+#sheet.flip { transform: rotate(180deg); }
+.sheet-title {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.sheet-section { margin-bottom: 18px; }
+.sheet-label {
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 8px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.stepper:last-child { border-bottom: none; }
+.stepper .s-name { flex: 1; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.stepper .s-val {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.stepper .s-val.warn { color: var(--danger); }
+.s-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #1c222b;
+  border: 1px solid var(--line);
+  font-size: 20px;
+  font-family: Georgia, serif;
+}
+.s-btn:active { background: #28303c; }
+.s-sub { font-size: 12px; color: var(--ink-dim); }
+.cmd-chip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.toggle-row { display: flex; gap: 10px; }
+.toggle {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #1c222b;
+  font-size: 14px;
+}
+.toggle.on { border-color: #f5c86b; color: #f5c86b; background: #241d10; }
+#nameInput {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #1c222b;
+  color: var(--ink);
+  text-align: center;
+  font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.swatches { display: flex; gap: 10px; justify-content: center; }
+.swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.swatch.sel { border-color: var(--ink); }
+.sheet-close {
+  width: 100%;
+  margin-top: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #1c222b;
+  border: 1px solid var(--line);
+  font-size: 15px;
+}
+.menu-btn {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: #1c222b;
+  border: 1px solid var(--line);
+  font-size: 15px;
+  text-align: center;
+}
+.menu-btn.danger { color: var(--danger); border-color: #4a2626; }
+.menu-info { text-align: center; color: var(--ink-dim); font-size: 13px; margin-bottom: 14px; }
+
+/* Dadi */
+.dice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.die-btn {
+  padding: 14px 0;
+  border-radius: 12px;
+  background: #1c222b;
+  border: 1px solid var(--line);
+  font-family: Georgia, serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+.die-btn:active { background: #28303c; }
+.die-btn.wide { grid-column: span 2; font-family: "Segoe UI", sans-serif; font-size: 14px; font-weight: 600; }
+#diceResult {
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: Georgia, serif;
+  font-size: 44px;
+  font-weight: 700;
+  color: #f5c86b;
+}
+#diceResult .dr-sub { font-family: "Segoe UI", sans-serif; font-size: 13px; font-weight: 400; color: var(--ink-dim); }
+
+/* Flash "chi inizia" */
+.panel.starter { animation: starterFlash 0.9s ease 3; }
+@keyframes starterFlash {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: inset 0 0 0 4px var(--p-glow); }
+}
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c222b;
+  border: 1px solid var(--line);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <h1>Segnapunti <span>MTG</span></h1>
+  <div class="setup-sub">Vita &middot; Comandante &middot; Veleno</div>
+  <div class="pips" aria-hidden="true">
+    <div class="pip" style="background:#f2e4ba"></div>
+    <div class="pip" style="background:#6fbbff"></div>
+    <div class="pip" style="background:#b78fe0"></div>
+    <div class="pip" style="background:#ff8a6b"></div>
+    <div class="pip" style="background:#7edb9e"></div>
+  </div>
+  <div>
+    <div class="field-label">Giocatori</div>
+    <div class="choice-row" id="countRow"></div>
+  </div>
+  <div>
+    <div class="field-label">Vita iniziale</div>
+    <div class="choice-row" id="lifeRow"></div>
+  </div>
+  <button id="startBtn">Inizia partita</button>
+</div>
+
+<div id="game" hidden>
+  <div id="board"></div>
+  <div id="hub">
+    <button class="hub-btn" id="undoBtn" aria-label="Annulla">&#8630;</button>
+    <button class="hub-btn" id="diceBtn" aria-label="Dadi">&#127922;</button>
+    <button class="hub-btn" id="menuBtn" aria-label="Menu">&#9776;</button>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="sheet"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const IS_TEST = typeof window !== 'undefined' && window.__TEST__;
+
+/* ================= Costanti ================= */
+const COLORS = ['W', 'U', 'B', 'R', 'G', 'O'];
+const COLOR_NAMES = { W: 'Bianco', U: 'Blu', B: 'Nero', R: 'Rosso', G: 'Verde', O: 'Oro' };
+const COLOR_GLOW = { W: '#f2e4ba', U: '#6fbbff', B: '#b78fe0', R: '#ff8a6b', G: '#7edb9e', O: '#f5c86b' };
+const LETHAL_POISON = 10;
+const LETHAL_CMD = 21;
+const MAX_HISTORY = 60;
+const SAVE_KEY = 'segnapunti-mtg-v1';
+
+/* ================= Logica pura (testabile) ================= */
+function newGame(count, startLife) {
+  const players = [];
+  for (let i = 0; i < count; i++) {
+    players.push({
+      id: i,
+      name: 'Giocatore ' + (i + 1),
+      color: COLORS[i % COLORS.length],
+      life: startLife,
+      poison: 0, energy: 0, exp: 0, tax: 0,
+      cmd: {}
+    });
+  }
+  return {
+    started: true,
+    startLife,
+    monarch: null,
+    initiative: null,
+    players,
+    startedAt: Date.now()
+  };
+}
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+function applyLife(state, pid, delta) {
+  const p = state.players[pid];
+  p.life = clamp(p.life + delta, -99, 999);
+}
+
+/* Danno da comandante: aggiorna il contatore e scala la vita dello stesso ammontare */
+function applyCmdDmg(state, pid, fromId, delta) {
+  const p = state.players[pid];
+  const cur = p.cmd[fromId] || 0;
+  const next = clamp(cur + delta, 0, 99);
+  const actual = next - cur;
+  if (actual === 0) return;
+  p.cmd[fromId] = next;
+  p.life = clamp(p.life - actual, -99, 999);
+}
+
+function applyCounter(state, pid, kind, delta) {
+  const p = state.players[pid];
+  p[kind] = clamp((p[kind] || 0) + delta, 0, 99);
+}
+
+function setMonarch(state, pid) {
+  state.monarch = state.monarch === pid ? null : pid;
+}
+
+function setInitiative(state, pid) {
+  state.initiative = state.initiative === pid ? null : pid;
+}
+
+function maxCmdDmg(p) {
+  let m = 0;
+  for (const k in p.cmd) m = Math.max(m, p.cmd[k]);
+  return m;
+}
+
+function isDead(p) {
+  return p.life <= 0 || p.poison >= LETHAL_POISON || maxCmdDmg(p) >= LETHAL_CMD;
+}
+
+function serialize(state) { return JSON.stringify(state); }
+function deserialize(str) {
+  const s = JSON.parse(str);
+  if (!s || !Array.isArray(s.players) || s.players.length < 2) throw new Error('Stato non valido');
+  return s;
+}
+
+function chooseStarter(count, rng) {
+  return Math.floor((rng || Math.random)() * count);
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, isDead, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
+}
+
+/* ================= Stato runtime ================= */
+let state = null;
+let history = [];
+let setupCount = 4;
+let setupLife = 40;
+let wakeLock = null;
+const deltaAcc = {};   // pid -> {sum, timer}
+const holdTimers = {}; // chiave zona -> {delay, interval}
+let lastBurst = { pid: -1, time: 0 };
+
+function pushHistory() {
+  history.push(serialize(state));
+  if (history.length > MAX_HISTORY) history.shift();
+}
+
+function undo() {
+  if (!history.length) return false;
+  state = deserialize(history.pop());
+  return true;
+}
+
+function save() {
+  try { localStorage.setItem(SAVE_KEY, serialize(state)); } catch (e) {}
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    return deserialize(raw);
+  } catch (e) { return null; }
+}
+
+function clearSaved() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+}
+
+/* ================= Wake lock ================= */
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { wakeLock = null; }
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+/* ================= Rendering ================= */
+const $ = id => document.getElementById(id);
+
+/* Righe del tavolo: indici dei giocatori, la prima riga è capovolta */
+function layoutRows(count) {
+  switch (count) {
+    case 2: return [[1], [0]];
+    case 3: return [[1, 2], [0]];
+    case 4: return [[2, 3], [0, 1]];
+    case 5: return [[2, 3, 4], [0, 1]];
+    default: return [[3, 4, 5], [0, 1, 2]];
+  }
+}
+
+function buildBoard() {
+  const board = $('board');
+  board.innerHTML = '';
+  const rows = layoutRows(state.players.length);
+  board.style.gridTemplateRows = rows.map(() => '1fr').join(' ');
+  rows.forEach((rowIds, ri) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.gridTemplateColumns = rowIds.map(() => '1fr').join(' ');
+    rowIds.forEach(pid => {
+      const p = state.players[pid];
+      const el = document.createElement('div');
+      el.className = 'panel mana-' + p.color + (ri === 0 ? ' flip' : '');
+      el.id = 'panel-' + pid;
+      el.innerHTML =
+        '<div class="p-name"></div>' +
+        '<div class="p-life"></div>' +
+        '<div class="p-badges"></div>' +
+        '<div class="delta"></div>' +
+        '<div class="p-skull">&#128128;</div>' +
+        '<div class="zone minus"><span class="hint">&minus;</span></div>' +
+        '<div class="zone plus"><span class="hint">+</span></div>' +
+        '<button class="p-gear" aria-label="Impostazioni giocatore">&#9881;</button>';
+      el.querySelector('.p-gear').addEventListener('click', () => openPlayerSheet(pid));
+      bindZone(el.querySelector('.zone.minus'), pid, -1);
+      bindZone(el.querySelector('.zone.plus'), pid, +1);
+      row.appendChild(el);
+    });
+    board.appendChild(row);
+  });
+  renderAll();
+}
+
+function renderAll() { state.players.forEach(p => renderPanel(p.id)); }
+
+function renderPanel(pid) {
+  const p = state.players[pid];
+  const el = $('panel-' + pid);
+  if (!el) return;
+  el.className = el.className.replace(/mana-\w/, 'mana-' + p.color);
+  el.classList.toggle('dead', isDead(p));
+  el.querySelector('.p-name').textContent = p.name;
+  const lifeEl = el.querySelector('.p-life');
+  lifeEl.textContent = p.life;
+  lifeEl.classList.toggle('low', p.life > 0 && p.life <= 5);
+  const badges = [];
+  const cmdMax = maxCmdDmg(p);
+  if (cmdMax > 0) badges.push('<span class="badge' + (cmdMax >= LETHAL_CMD ? ' warn' : '') + '">&#9876;&#65039; ' + cmdMax + '</span>');
+  if (p.poison > 0) badges.push('<span class="badge' + (p.poison >= LETHAL_POISON ? ' warn' : '') + '">&#9760;&#65039; ' + p.poison + '</span>');
+  if (p.energy > 0) badges.push('<span class="badge">&#9889; ' + p.energy + '</span>');
+  if (p.exp > 0) badges.push('<span class="badge">&#10022; ' + p.exp + '</span>');
+  if (p.tax > 0) badges.push('<span class="badge">&#129689; +' + p.tax * 2 + '</span>');
+  if (state.monarch === pid) badges.push('<span class="badge">&#128081;</span>');
+  if (state.initiative === pid) badges.push('<span class="badge">&#129517;</span>');
+  el.querySelector('.p-badges').innerHTML = badges.join('');
+}
+
+/* ================= Gesti +/- vita ================= */
+function tapLife(pid, delta) {
+  const now = Date.now();
+  if (lastBurst.pid !== pid || now - lastBurst.time > 1400) pushHistory();
+  lastBurst = { pid, time: now };
+  applyLife(state, pid, delta);
+  showDelta(pid, delta);
+  renderPanel(pid);
+  save();
+}
+
+function showDelta(pid, delta) {
+  const acc = deltaAcc[pid] || (deltaAcc[pid] = { sum: 0, timer: null });
+  acc.sum += delta;
+  const el = $('panel-' + pid).querySelector('.delta');
+  el.textContent = (acc.sum > 0 ? '+' : '') + acc.sum;
+  el.classList.add('show');
+  clearTimeout(acc.timer);
+  acc.timer = setTimeout(() => { el.classList.remove('show'); acc.sum = 0; }, 1400);
+}
+
+function bindZone(zone, pid, delta) {
+  const key = pid + ':' + delta;
+  const start = e => {
+    e.preventDefault();
+    tapLife(pid, delta);
+    const t = holdTimers[key] = {};
+    t.delay = setTimeout(() => {
+      t.interval = setInterval(() => tapLife(pid, delta), 110);
+    }, 450);
+  };
+  const stop = () => {
+    const t = holdTimers[key];
+    if (t) { clearTimeout(t.delay); clearInterval(t.interval); delete holdTimers[key]; }
+  };
+  zone.addEventListener('pointerdown', start);
+  zone.addEventListener('pointerup', stop);
+  zone.addEventListener('pointercancel', stop);
+  zone.addEventListener('pointerleave', stop);
+  zone.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+/* ================= Modali ================= */
+function openSheet(html, flip) {
+  const sheet = $('sheet');
+  sheet.innerHTML = html;
+  sheet.classList.toggle('flip', !!flip);
+  $('overlay').classList.add('open');
+  return sheet;
+}
+function closeSheet() { $('overlay').classList.remove('open'); }
+
+function isFlipped(pid) {
+  return layoutRows(state.players.length)[0].includes(pid);
+}
+
+function stepperRow(label, sub, val, warn, minusAct, plusAct, chipColor) {
+  return '<div class="stepper">' +
+    '<span class="s-name">' + (chipColor ? '<span class="cmd-chip" style="background:' + chipColor + '"></span>' : '') +
+    '<span>' + label + (sub ? ' <span class="s-sub">' + sub + '</span>' : '') + '</span></span>' +
+    '<button class="s-btn" data-act="' + minusAct + '">&minus;</button>' +
+    '<span class="s-val' + (warn ? ' warn' : '') + '">' + val + '</span>' +
+    '<button class="s-btn" data-act="' + plusAct + '">+</button>' +
+    '</div>';
+}
+
+function openPlayerSheet(pid) {
+  const p = state.players[pid];
+  let html = '<div class="sheet-title">' + escapeHtml(p.name) + '</div>';
+
+  const opponents = state.players.filter(o => o.id !== pid);
+  html += '<div class="sheet-section"><div class="sheet-label">Danno da comandante (letale a 21)</div>';
+  opponents.forEach(o => {
+    const v = p.cmd[o.id] || 0;
+    html += stepperRow('da ' + escapeHtml(o.name), '', v, v >= LETHAL_CMD, 'cmd:' + o.id + ':-1', 'cmd:' + o.id + ':1', COLOR_GLOW[o.color]);
+  });
+  html += '</div>';
+
+  html += '<div class="sheet-section"><div class="sheet-label">Contatori</div>';
+  html += stepperRow('&#9760;&#65039; Veleno', '(letale a 10)', p.poison, p.poison >= LETHAL_POISON, 'ctr:poison:-1', 'ctr:poison:1');
+  html += stepperRow('&#9889; Energia', '', p.energy, false, 'ctr:energy:-1', 'ctr:energy:1');
+  html += stepperRow('&#10022; Esperienza', '', p.exp, false, 'ctr:exp:-1', 'ctr:exp:1');
+  html += stepperRow('&#129689; Tassa comandante', '(+' + p.tax * 2 + ' mana)', p.tax, false, 'ctr:tax:-1', 'ctr:tax:1');
+  html += '</div>';
+
+  html += '<div class="sheet-section"><div class="sheet-label">Stato</div><div class="toggle-row">' +
+    '<button class="toggle' + (state.monarch === pid ? ' on' : '') + '" data-act="monarch">&#128081; Monarca</button>' +
+    '<button class="toggle' + (state.initiative === pid ? ' on' : '') + '" data-act="initiative">&#129517; Iniziativa</button>' +
+    '</div></div>';
+
+  html += '<div class="sheet-section"><div class="sheet-label">Nome</div>' +
+    '<input id="nameInput" maxlength="18" value="' + escapeHtml(p.name) + '"></div>';
+
+  html += '<div class="sheet-section"><div class="sheet-label">Colore</div><div class="swatches">' +
+    COLORS.map(c => '<button class="swatch' + (p.color === c ? ' sel' : '') + '" style="background:' + COLOR_GLOW[c] + '" data-act="color:' + c + '" aria-label="' + COLOR_NAMES[c] + '"></button>').join('') +
+    '</div></div>';
+
+  html += '<button class="sheet-close" data-act="close">Chiudi</button>';
+
+  const sheet = openSheet(html, isFlipped(pid));
+
+  sheet.querySelector('#nameInput').addEventListener('input', e => {
+    pushHistoryOnce();
+    p.name = e.target.value.trim() || 'Giocatore ' + (pid + 1);
+    renderPanel(pid);
+    save();
+  });
+
+  let namePushed = false;
+  function pushHistoryOnce() { if (!namePushed) { pushHistory(); namePushed = true; } }
+
+  sheet.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const parts = act.dataset.act.split(':');
+    if (parts[0] === 'close') { closeSheet(); return; }
+    pushHistory();
+    if (parts[0] === 'cmd') applyCmdDmg(state, pid, Number(parts[1]), Number(parts[2]));
+    else if (parts[0] === 'ctr') applyCounter(state, pid, parts[1], Number(parts[2]));
+    else if (parts[0] === 'monarch') setMonarch(state, pid);
+    else if (parts[0] === 'initiative') setInitiative(state, pid);
+    else if (parts[0] === 'color') p.color = parts[1];
+    renderAll();
+    save();
+    openPlayerSheet(pid); // ridisegna la scheda con i valori aggiornati
+  });
+}
+
+function openMenuSheet() {
+  const mins = Math.floor((Date.now() - state.startedAt) / 60000);
+  const html =
+    '<div class="sheet-title">Menu</div>' +
+    '<div class="menu-info">Partita in corso da ' + mins + ' min &middot; ' + state.players.length + ' giocatori &middot; vita ' + state.startLife + '</div>' +
+    '<button class="menu-btn" data-act="rematch">&#8635; Rivincita (stessi giocatori)</button>' +
+    '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
+    '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
+    '<button class="sheet-close" data-act="close">Chiudi</button>';
+  const sheet = openSheet(html, false);
+  sheet.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const a = act.dataset.act;
+    if (a === 'close') closeSheet();
+    else if (a === 'rematch') {
+      if (!confirm('Ricominciare la partita con gli stessi giocatori?')) return;
+      pushHistory();
+      state.players.forEach(p => { p.life = state.startLife; p.poison = 0; p.energy = 0; p.exp = 0; p.tax = 0; p.cmd = {}; });
+      state.monarch = null;
+      state.initiative = null;
+      state.startedAt = Date.now();
+      renderAll();
+      save();
+      closeSheet();
+      toast('Nuova partita!');
+    } else if (a === 'new') {
+      if (!confirm('Tornare al setup? La partita corrente andrà persa.')) return;
+      clearSaved();
+      showSetup();
+      closeSheet();
+    } else if (a === 'reset') {
+      if (!confirm('Azzerare tutto e tornare al setup?')) return;
+      clearSaved();
+      history = [];
+      showSetup();
+      closeSheet();
+    }
+  });
+}
+
+function openDiceSheet() {
+  const html =
+    '<div class="sheet-title">Dadi</div>' +
+    '<div class="dice-grid">' +
+    [4, 6, 8, 10, 12, 20].map(n => '<button class="die-btn" data-act="d:' + n + '">d' + n + '</button>').join('') +
+    '<button class="die-btn wide" data-act="coin">&#129689; Moneta</button>' +
+    '</div>' +
+    '<button class="menu-btn" data-act="starter">&#127919; Chi inizia?</button>' +
+    '<div id="diceResult"><span class="dr-sub">Scegli un dado</span></div>' +
+    '<button class="sheet-close" data-act="close">Chiudi</button>';
+  const sheet = openSheet(html, false);
+  let anim = null;
+  sheet.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const parts = act.dataset.act.split(':');
+    const res = $('diceResult');
+    clearInterval(anim);
+    if (parts[0] === 'close') { closeSheet(); return; }
+    if (parts[0] === 'd') {
+      const sides = Number(parts[1]);
+      let ticks = 0;
+      anim = setInterval(() => {
+        res.innerHTML = (1 + Math.floor(Math.random() * sides)) + '<span class="dr-sub">d' + sides + '</span>';
+        if (++ticks > 8) clearInterval(anim);
+      }, 60);
+    } else if (parts[0] === 'coin') {
+      let ticks = 0;
+      anim = setInterval(() => {
+        res.innerHTML = (Math.random() < 0.5 ? 'Testa' : 'Croce') + '<span class="dr-sub">moneta</span>';
+        if (++ticks > 8) clearInterval(anim);
+      }, 70);
+    } else if (parts[0] === 'starter') {
+      const idx = chooseStarter(state.players.length);
+      const p = state.players[idx];
+      res.innerHTML = escapeHtml(p.name) + '<span class="dr-sub">inizia la partita</span>';
+      closeSheet();
+      toast('Inizia ' + p.name + '!');
+      const panel = $('panel-' + idx);
+      panel.classList.remove('starter');
+      void panel.offsetWidth;
+      panel.classList.add('starter');
+    }
+  });
+}
+
+/* ================= Setup ================= */
+function renderSetup() {
+  const countRow = $('countRow');
+  countRow.innerHTML = '';
+  for (let n = 2; n <= 6; n++) {
+    const b = document.createElement('button');
+    b.className = 'choice' + (n === setupCount ? ' sel' : '');
+    b.textContent = n;
+    b.addEventListener('click', () => { setupCount = n; renderSetup(); });
+    countRow.appendChild(b);
+  }
+  const lifeRow = $('lifeRow');
+  lifeRow.innerHTML = '';
+  [20, 30, 40].forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'choice' + (v === setupLife ? ' sel' : '');
+    b.textContent = v;
+    b.addEventListener('click', () => { setupLife = v; renderSetup(); });
+    lifeRow.appendChild(b);
+  });
+  const custom = document.createElement('input');
+  custom.type = 'number';
+  custom.id = 'customLife';
+  custom.min = 1;
+  custom.max = 999;
+  custom.placeholder = '...';
+  if (![20, 30, 40].includes(setupLife)) custom.value = setupLife;
+  custom.addEventListener('input', () => {
+    const v = parseInt(custom.value, 10);
+    if (v >= 1 && v <= 999) {
+      setupLife = v;
+      lifeRow.querySelectorAll('.choice').forEach(b => b.classList.remove('sel'));
+    }
+  });
+  lifeRow.appendChild(custom);
+}
+
+function showSetup() {
+  releaseWakeLock();
+  state = null;
+  $('game').hidden = true;
+  $('setup').hidden = false;
+  renderSetup();
+}
+
+function showGame() {
+  $('setup').hidden = true;
+  $('game').hidden = false;
+  buildBoard();
+  requestWakeLock();
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ================= Avvio ================= */
+function boot() {
+  renderSetup();
+
+  $('startBtn').addEventListener('click', () => {
+    history = [];
+    state = newGame(setupCount, setupLife);
+    save();
+    showGame();
+  });
+
+  $('undoBtn').addEventListener('click', () => {
+    if (undo()) { buildBoard(); save(); toast('Annullato'); }
+    else toast('Niente da annullare');
+  });
+  $('diceBtn').addEventListener('click', openDiceSheet);
+  $('menuBtn').addEventListener('click', openMenuSheet);
+  $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeSheet(); });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state && state.started) requestWakeLock();
+  });
+
+  // #demo4 o ?demo4: avvia subito una partita di prova (usato anche nei test visivi)
+  const demo = ((location.hash || '') + (location.search || '')).match(/[#?]demo(\d)?\b/);
+  const saved = loadSaved();
+  if (demo) {
+    state = newGame(clamp(Number(demo[1] || 4), 2, 6), 40);
+    showGame();
+  } else if (saved && saved.started) {
+    // Riprende automaticamente la partita salvata
+    state = saved;
+    showGame();
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+
+if (!IS_TEST) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+}
+</script>
+</body>
+</html>
