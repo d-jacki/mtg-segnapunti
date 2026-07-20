@@ -1,4 +1,4 @@
-const CACHE_NAME = 'segnapunti-v3';
+const CACHE_NAME = 'segnapunti-v4';
 const ASSETS = [
   './',
   './index.html',

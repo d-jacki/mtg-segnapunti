@@ -146,19 +146,56 @@ input { font: inherit; }
   color: var(--p-text);
   overflow: hidden;
   container-type: size;
+}
+
+/* Il contenuto del pannello ruota in blocco verso il posto del giocatore.
+   --cw/--ch valgono l'1% del lato del contenuto (non del pannello): quando
+   è ruotato di 90° i due si scambiano, così nomi e cifre continuano a
+   scalare sul lato giusto del rettangolo. */
+.p-inner {
+  --rot: 0deg;
+  --cw: 1cqw;
+  --ch: 1cqh;
+  /* quanta altezza del contenuto può prendersi la cifra della vita */
+  --life-v: 56;
+  --life-vl: 50;
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%) rotate(var(--rot));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
-.panel.flip { transform: rotate(180deg); }
+.panel[data-row="top"] .p-inner { --rot: 180deg; }
+
+/* Pannello nettamente più alto che largo: ruotando di 90° la cifra della
+   vita usa il lato lungo e diventa circa il doppio. La colonna centrale
+   resta sopra/sotto perché non ha un bordo del tavolo vicino. */
+@container (aspect-ratio < 0.8) {
+  .panel[data-side="left"] .p-inner,
+  .panel[data-side="right"] .p-inner {
+    width: 100cqh;
+    height: 100cqw;
+    --cw: 1cqh;
+    --ch: 1cqw;
+    /* ruotato il lato lungo è abbondante: la cifra può crescere in altezza
+       fin quasi a toccare la fascia di nome e badge */
+    --life-v: 66;
+    --life-vl: 58;
+  }
+  .panel[data-side="left"] .p-inner { --rot: 90deg; }
+  .panel[data-side="right"] .p-inner { --rot: -90deg; }
+}
 
 .p-name {
   position: absolute;
-  top: 7cqh;
+  top: 7%;
   left: 12px; right: 12px;
   text-align: center;
-  font-size: clamp(11px, 5cqh, 16px);
+  font-size: clamp(11px, calc(5 * var(--ch)), 16px);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--p-text) 65%, transparent);
@@ -170,7 +207,7 @@ input { font: inherit; }
 .p-life {
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 700;
-  font-size: min(38cqw, 56cqh);
+  font-size: min(calc(38 * var(--cw)), calc(var(--life-v) * var(--ch)));
   line-height: 1;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 28px color-mix(in srgb, var(--p-glow) 45%, transparent);
@@ -178,20 +215,65 @@ input { font: inherit; }
   transition: color 0.2s;
 }
 .p-life.low { color: var(--danger); }
-.p-life.long { font-size: min(30cqw, 50cqh); }
+.p-life.long { font-size: min(calc(30 * var(--cw)), calc(var(--life-vl) * var(--ch))); }
+/* Riga in fondo al pannello: un chip per avversario (danno da comandante) e
+   i segnalini attivi. Tap = +1, pressione lunga = -1, senza aprire la scheda.
+   La riga non intercetta i tocchi, solo i suoi bottoni: così i badge
+   puramente informativi lasciano passare il tap alle zone della vita. */
 .p-badges {
   position: absolute;
-  bottom: 6cqh;
-  left: 24px; right: 24px;
+  bottom: 6%;
+  left: 8px; right: 8px;
   display: flex;
   justify-content: center;
-  gap: 8px;
-  font-size: clamp(11px, 5cqh, 15px);
+  align-items: center;
+  gap: 6px;
+  /* --chips (dal render) è quanti elementi ci sono in riga: la dimensione
+     scende quando sono tanti, così la riga non va mai a capo finendo sopra
+     l'ingranaggio. Senza wrap l'altezza della riga resta prevedibile. */
+  font-size: min(clamp(11px, calc(5 * var(--ch)), 15px), calc(34 * var(--cw) / var(--chips, 1)));
   pointer-events: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  z-index: 2;
 }
+.p-badges button { pointer-events: auto; position: relative; }
+/* Area sensibile più grande della grafica: i chip sono piccoli per forza */
+.p-badges button::after { content: ''; position: absolute; inset: -8px -3px; }
+
 .badge { display: inline-flex; align-items: center; gap: 3px; opacity: 0.9; }
 .badge.warn { color: var(--danger); }
+
+.opp-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9em;
+  height: 1.9em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  border: 1.5px solid var(--chip);
+  background: color-mix(in srgb, var(--chip) 15%, transparent);
+  color: var(--chip);
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.1s;
+}
+.opp-chip.hit { background: color-mix(in srgb, var(--chip) 36%, transparent); }
+.opp-chip.warn {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.ctr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0.9;
+  padding: 0.25em 0.1em;
+  transition: transform 0.1s;
+}
+.ctr-badge.warn { color: var(--danger); opacity: 1; }
+.opp-chip:active, .ctr-badge:active { transform: scale(0.88); }
 
 /* Zone tap +/- */
 .zone {
@@ -204,7 +286,7 @@ input { font: inherit; }
 .zone.minus { left: 0; justify-content: flex-start; }
 .zone.plus { right: 0; justify-content: flex-end; }
 .zone .hint {
-  font-size: clamp(16px, 10cqh, 26px);
+  font-size: clamp(16px, calc(10 * var(--ch)), 26px);
   color: color-mix(in srgb, var(--p-text) 22%, transparent);
   padding: 0 14px;
   pointer-events: none;
@@ -214,11 +296,11 @@ input { font: inherit; }
 /* Chip delta */
 .delta {
   position: absolute;
-  top: 16cqh;
+  top: 16%;
   left: 50%;
   transform: translateX(-50%);
   font-family: Georgia, serif;
-  font-size: clamp(15px, 10cqh, 26px);
+  font-size: clamp(15px, calc(10 * var(--ch)), 26px);
   font-weight: 700;
   color: var(--p-glow);
   opacity: 0;
@@ -227,18 +309,20 @@ input { font: inherit; }
 }
 .delta.show { opacity: 1; }
 
-/* Bottone impostazioni giocatore */
+/* Impostazioni giocatore: ultimo elemento della riga in basso. Stando nel
+   flex non può più finire sotto i chip, qualunque sia il numero di
+   giocatori o l'orientamento del pannello. */
 .p-gear {
-  position: absolute;
-  bottom: 6px;
-  right: 6px;
-  width: 38px;
-  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9em;
+  height: 1.9em;
   border-radius: 50%;
-  font-size: 16px;
   color: color-mix(in srgb, var(--p-text) 55%, transparent);
-  z-index: 2;
+  transition: transform 0.1s;
 }
+.p-gear:active { transform: scale(0.88); }
 
 /* Morte */
 .panel.dead .p-life, .panel.dead .p-badges, .panel.dead .p-name { opacity: 0.25; }
@@ -248,7 +332,7 @@ input { font: inherit; }
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: min(24cqw, 34cqh);
+  font-size: min(calc(24 * var(--cw)), calc(34 * var(--ch)));
   pointer-events: none;
   filter: grayscale(0.4);
 }
@@ -669,6 +753,16 @@ function layoutRows(count) {
   }
 }
 
+/* Bordo del tavolo su cui siede il giocatore, in base alla sua colonna.
+   In una riga da un solo pannello, o nella colonna centrale, non c'è un
+   bordo laterale vicino: il pannello resta orientato sopra/sotto. */
+function seatSide(col, cols) {
+  if (cols < 2) return 'center';
+  if (col === 0) return 'left';
+  if (col === cols - 1) return 'right';
+  return 'center';
+}
+
 /* Azzera timer e accumulatori dei tap: il board sta per essere ricostruito
    e i vecchi riferimenti a elementi/valori non sono più validi */
 function resetTapState() {
@@ -687,12 +781,17 @@ function buildBoard() {
     const row = document.createElement('div');
     row.className = 'row';
     row.style.gridTemplateColumns = rowIds.map(() => '1fr').join(' ');
-    rowIds.forEach(pid => {
+    rowIds.forEach((pid, ci) => {
       const p = state.players[pid];
       const el = document.createElement('div');
-      el.className = 'panel mana-' + p.color + (ri === 0 ? ' flip' : '');
+      el.className = 'panel mana-' + p.color;
       el.id = 'panel-' + pid;
+      el.dataset.row = ri === 0 ? 'top' : 'bottom';
+      el.dataset.side = seatSide(ci, rowIds.length);
+      // Tutto dentro .p-inner: ruotando il contenitore ruotano insieme cifra
+      // e zone di tap, che restano "meno a sinistra" per chi guarda
       el.innerHTML =
+        '<div class="p-inner">' +
         '<div class="p-name"></div>' +
         '<div class="p-life"></div>' +
         '<div class="p-badges"></div>' +
@@ -700,8 +799,8 @@ function buildBoard() {
         '<div class="p-skull">&#128128;</div>' +
         '<button class="zone minus" aria-label="Togli vita"><span class="hint">&minus;</span></button>' +
         '<button class="zone plus" aria-label="Aggiungi vita"><span class="hint">+</span></button>' +
-        '<button class="p-gear" aria-label="Impostazioni giocatore">&#9881;</button>';
-      el.querySelector('.p-gear').addEventListener('click', () => openPlayerSheet(pid));
+        '</div>';
+      bindBadgeRow(el.querySelector('.p-badges'), pid);
       bindZone(el.querySelector('.zone.minus'), pid, -1);
       bindZone(el.querySelector('.zone.plus'), pid, +1);
       row.appendChild(el);
@@ -725,15 +824,32 @@ function renderPanel(pid) {
   lifeEl.classList.toggle('low', p.life > 0 && p.life <= 5);
   lifeEl.classList.toggle('long', String(p.life).length > 2);
   const badges = [];
-  const cmdMax = maxCmdDmg(p);
-  if (cmdMax > 0) badges.push('<span class="badge' + (cmdMax >= LETHAL_CMD ? ' warn' : '') + '">&#9876;&#65039; ' + cmdMax + '</span>');
-  if (p.poison > 0) badges.push('<span class="badge' + (p.poison >= LETHAL_POISON ? ' warn' : '') + '">&#9760;&#65039; ' + p.poison + '</span>');
-  if (p.energy > 0) badges.push('<span class="badge">&#9889; ' + p.energy + '</span>');
-  if (p.exp > 0) badges.push('<span class="badge">&#10022; ' + p.exp + '</span>');
-  if (p.tax > 0) badges.push('<span class="badge">&#129689; +' + p.tax * 2 + '</span>');
+  // Un chip per avversario, sempre visibile: sostituisce il vecchio badge
+  // riassuntivo ⚔️ e permette di segnare il danno senza aprire la scheda
+  state.players.forEach(o => {
+    if (o.id === pid) return;
+    const v = p.cmd[o.id] || 0;
+    badges.push('<button class="opp-chip' + (v >= LETHAL_CMD ? ' warn' : (v > 0 ? ' hit' : '')) +
+      '" style="--chip:' + COLOR_GLOW[o.color] + '" data-cmd="' + o.id +
+      '" aria-label="Danno da comandante da ' + escapeHtml(o.name) + ': ' + v + '">' + (v || '') + '</button>');
+  });
+  const ctr = (kind, icon, val, label, warn) =>
+    '<button class="ctr-badge' + (warn ? ' warn' : '') + '" data-ctr="' + kind +
+    '" aria-label="' + label + ': ' + val + '">' + icon + ' ' + val + '</button>';
+  if (p.poison > 0) badges.push(ctr('poison', '&#9760;&#65039;', p.poison, 'Veleno', p.poison >= LETHAL_POISON));
+  if (p.energy > 0) badges.push(ctr('energy', '&#9889;', p.energy, 'Energia', false));
+  if (p.exp > 0) badges.push(ctr('exp', '&#10022;', p.exp, 'Esperienza', false));
+  if (p.tax > 0) badges.push(ctr('tax', '&#129689;', '+' + p.tax * 2, 'Tassa comandante', false));
   if (state.monarch === pid) badges.push('<span class="badge">&#128081;</span>');
   if (state.initiative === pid) badges.push('<span class="badge">&#129517;</span>');
-  el.querySelector('.p-badges').innerHTML = badges.join('');
+  // i segnalini (icona + numero) sono più larghi dei chip: contano doppio
+  // nel calcolo della dimensione (vedi --chips nel CSS di .p-badges)
+  const chips = state.players.length - 1;
+  const units = chips + 2 * (badges.length - chips) + 1; // +1 per l'ingranaggio
+  badges.push('<button class="p-gear" data-gear aria-label="Impostazioni giocatore">&#9881;</button>');
+  const row = el.querySelector('.p-badges');
+  row.innerHTML = badges.join('');
+  row.style.setProperty('--chips', String(units));
 }
 
 /* ================= Gesti +/- vita ================= */
@@ -755,6 +871,59 @@ function showDelta(pid, delta) {
   el.classList.add('show');
   clearTimeout(acc.timer);
   acc.timer = setTimeout(() => { el.classList.remove('show'); acc.sum = 0; }, 1400);
+}
+
+/* La riga dei chip viene ricostruita a ogni render, quindi i singoli bottoni
+   non possono avere listener propri: un solo listener sulla riga (che invece
+   sopravvive) delega in base ai data-attribute. Il timer sta in holdTimers
+   così resetTapState lo azzera se il tavolo viene ricostruito sotto. */
+function bindBadgeRow(row, pid) {
+  const key = 'badge:' + pid;
+  let pending = null;
+  const stop = () => {
+    const t = holdTimers[key];
+    if (t) { clearTimeout(t.delay); delete holdTimers[key]; }
+  };
+  const apply = (ref, delta) => {
+    pushHistory();
+    if (ref.cmd !== null) applyCmdDmg(state, pid, ref.cmd, delta);
+    else applyCounter(state, pid, ref.ctr, delta);
+    renderAll();
+    save();
+  };
+  // l'ingranaggio vive nella stessa riga ma apre e basta: nessun tap/hold
+  row.addEventListener('click', e => {
+    if (e.target.closest('[data-gear]')) openPlayerSheet(pid);
+  });
+  row.addEventListener('pointerdown', e => {
+    const el = e.target.closest('[data-cmd],[data-ctr]');
+    if (!el) return;
+    e.preventDefault();
+    stop();
+    // i valori si leggono subito: dopo il render l'elemento non esiste più
+    pending = {
+      cmd: el.dataset.cmd !== undefined ? Number(el.dataset.cmd) : null,
+      ctr: el.dataset.ctr || null
+    };
+    const t = holdTimers[key] = {};
+    t.delay = setTimeout(() => {
+      const ref = pending;
+      pending = null;
+      stop();
+      apply(ref, -1);
+    }, 450);
+  });
+  row.addEventListener('pointerup', () => {
+    if (!pending) return;
+    const ref = pending;
+    pending = null;
+    // se il timer c'è ancora il dito si è alzato prima della soglia: è un tap
+    if (holdTimers[key]) { stop(); apply(ref, +1); }
+  });
+  const cancel = () => { stop(); pending = null; };
+  row.addEventListener('pointercancel', cancel);
+  row.addEventListener('pointerleave', cancel);
+  row.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 function bindZone(zone, pid, delta) {
@@ -873,12 +1042,16 @@ function openMenuSheet() {
   const html =
     '<div class="sheet-title">Menu</div>' +
     '<div class="menu-info">Partita in corso da ' + mins + ' min &middot; ' + state.players.length + ' giocatori &middot; vita ' + state.startLife + '</div>' +
+    (fullscreenAvailable()
+      ? '<button class="menu-btn" data-act="fullscreen">&#9974; ' + (isFullscreen() ? 'Esci da schermo intero' : 'Schermo intero') + '</button>'
+      : '') +
     '<button class="menu-btn" data-act="rematch">&#8635; Rivincita (stessi giocatori)</button>' +
     '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
     '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
   openSheet(html, false, a => {
     if (a === 'close') closeSheet();
+    else if (a === 'fullscreen') { toggleFullscreen(); closeSheet(); }
     else if (a === 'rematch') {
       if (!confirm('Ricominciare la partita con gli stessi giocatori?')) return;
       pushHistory();
@@ -996,6 +1169,59 @@ function showSetup() {
   renderSetup();
 }
 
+/* ================= Schermo intero =================
+   L'API esige un gesto dell'utente: non si può chiedere il fullscreen
+   all'avvio. Da qui i due agganci: la voce nel menu e, quando si riprende
+   una partita salvata (che salta il bottone "Inizia"), il primo tocco sul
+   tavolo. Su Safari iPhone l'API non esiste: le funzioni non fanno nulla e
+   la voce di menu resta nascosta, lì si usa "Aggiungi alla schermata Home". */
+/* Risolte a ogni chiamata, non una volta sola: il mini-DOM dei test non
+   espone documentElement né matchMedia */
+function fsRoot() { return document.documentElement || null; }
+function fsRequest() {
+  const el = fsRoot();
+  return el && (el.requestFullscreen || el.webkitRequestFullscreen);
+}
+
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+/* Con la PWA installata si è già a tutto schermo: la voce sarebbe inutile */
+function fullscreenAvailable() {
+  if (!fsRequest() || typeof window.matchMedia !== 'function') return false;
+  return !window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+}
+
+function callFs(fn, ctx) {
+  try {
+    const r = fn.call(ctx);
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) { /* rifiutato dal browser: si gioca in finestra */ }
+}
+
+function goFullscreen() {
+  if (!fullscreenAvailable() || isFullscreen()) return;
+  callFs(fsRequest(), fsRoot());
+}
+
+function toggleFullscreen() {
+  if (!isFullscreen()) return goFullscreen();
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit) callFs(exit, document);
+}
+
+/* Un solo tocco, in fase di cattura e senza preventDefault: il tap vale
+   comunque come +/- vita, il fullscreen è un effetto collaterale. */
+function armFullscreenOnFirstTap() {
+  if (!fullscreenAvailable()) return;
+  const once = () => {
+    document.removeEventListener('pointerdown', once, true);
+    goFullscreen();
+  };
+  document.addEventListener('pointerdown', once, true);
+}
+
 function showGame() {
   $('setup').hidden = true;
   $('game').hidden = false;
@@ -1020,6 +1246,7 @@ function boot() {
   renderSetup();
 
   $('startBtn').addEventListener('click', () => {
+    goFullscreen();
     history = [];
     state = newGame(setupCount, setupLife);
     save();
@@ -1051,9 +1278,11 @@ function boot() {
     state = newGame(clamp(Number(demo[1] || 4), 2, 6), 40);
     showGame();
   } else if (saved && saved.started) {
-    // Riprende automaticamente la partita salvata
+    // Riprende automaticamente la partita salvata: nessun gesto da cui
+    // chiedere il fullscreen, lo si aggancia al primo tocco
     state = saved;
     showGame();
+    armFullscreenOnFirstTap();
   }
 
   if ('serviceWorker' in navigator) {
