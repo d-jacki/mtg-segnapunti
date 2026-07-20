@@ -1162,6 +1162,7 @@ function renderSetup() {
 
 function showSetup() {
   releaseWakeLock();
+  unlockOrientation();
   state = null;
   history = [];
   $('game').hidden = true;
@@ -1222,11 +1223,44 @@ function armFullscreenOnFirstTap() {
   document.addEventListener('pointerdown', once, true);
 }
 
+/* ================= Orientamento =================
+   In due si gioca uno di fronte all'altro con il telefono in mezzo: il
+   tavolo è già due pannelli impilati e una rotazione in orizzontale
+   ribalterebbe i posti. Dai tre in su le colonne servono, quindi si lascia
+   libero. L'API vuole il fullscreen (o la PWA installata) e su Safari
+   iPhone non esiste: dove non si può, si resta com'è. */
+function orientationApi() {
+  return (typeof screen !== 'undefined' && screen && screen.orientation) || null;
+}
+
+function lockPortrait() {
+  const o = orientationApi();
+  if (!o || typeof o.lock !== 'function') return;
+  try {
+    const r = o.lock('portrait');
+    if (r && r.catch) r.catch(() => {}); // fuori fullscreen il browser rifiuta
+  } catch (e) { /* non supportato: si gioca come capita */ }
+}
+
+function unlockOrientation() {
+  const o = orientationApi();
+  if (!o || typeof o.unlock !== 'function') return;
+  try { o.unlock(); } catch (e) { /* idem */ }
+}
+
+/* Vale solo per il tavolo da due, e va richiamata anche dopo il fullscreen:
+   la richiesta è asincrona, al primo tentativo il lock viene respinto. */
+function applyOrientationLock() {
+  if (state && state.players.length === 2) lockPortrait();
+  else unlockOrientation();
+}
+
 function showGame() {
   $('setup').hidden = true;
   $('game').hidden = false;
   buildBoard();
   requestWakeLock();
+  applyOrientationLock();
 }
 
 function toast(msg) {
@@ -1270,6 +1304,10 @@ function boot() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && state && state.started) requestWakeLock();
   });
+
+  // Entrati a schermo intero il lock diventa concesso: si riprova
+  document.addEventListener('fullscreenchange', applyOrientationLock);
+  document.addEventListener('webkitfullscreenchange', applyOrientationLock);
 
   // #demo4 o ?demo4: avvia subito una partita di prova (usato anche nei test visivi)
   const demo = ((location.hash || '') + (location.search || '')).match(/[#?]demo(\d)?\b/);
