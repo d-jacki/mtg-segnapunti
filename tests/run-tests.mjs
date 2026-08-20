@@ -219,6 +219,19 @@ test('chooseStarter restituisce indice valido', () => {
   eq(L.chooseStarter(4, () => 0), 0);
 });
 
+test('il danno da comandante si traccia solo da 3 giocatori in su', () => {
+  assert(!L.usesCmdDmg(L.newGame(2, 20)), 'duello: niente comandante');
+  for (let n = 3; n <= 6; n++) assert(L.usesCmdDmg(L.newGame(n, 40)), n + ' giocatori:');
+});
+
+test('deserialize ripulisce il danno comandante nei salvataggi a 2 giocatori', () => {
+  const s = L.newGame(2, 20);
+  s.players[0].cmd = { 1: 21 };
+  const back = L.deserialize(L.serialize(s));
+  eq(Object.keys(back.players[0].cmd).length, 0, 'cmd residuo:');
+  assert(!L.isDead(back.players[0]), 'niente teschio fantasma');
+});
+
 /* ================= Layer UI (fogli modali) ================= */
 
 // Simula un click su un elemento con data-act dentro #sheet
@@ -258,6 +271,17 @@ test('chiudere il foglio disattiva le azioni', () => {
   app.closeSheet();
   fire('ctr:poison:1');
   eq(app.getState().players[2].poison, 0, 'nessuna azione a foglio chiuso:');
+});
+
+test('la scheda mostra il comandante in multiplayer ma non in duello', () => {
+  app.setState(L.newGame(4, 40));
+  app.openPlayerSheet(0);
+  assert(sheet.innerHTML.includes('Danno da comandante'), 'a 4 giocatori la sezione ci deve essere');
+  app.closeSheet();
+  app.setState(L.newGame(2, 20));
+  app.openPlayerSheet(0);
+  assert(!sheet.innerHTML.includes('Danno da comandante'), 'in duello la sezione non ci deve essere');
+  app.closeSheet();
 });
 
 console.log('\n' + passed + ' passati, ' + failed + ' falliti');

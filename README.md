@@ -8,7 +8,7 @@ PWA installabile, funziona offline. Live: **https://d-jacki.github.io/mtg-segnap
 - **2–6 giocatori**, vita iniziale 20 / 30 / 40 o personalizzata
 - Pannelli **capovolti per chi siede di fronte**: ogni giocatore legge i propri punti dal suo lato
 - Tap sinistra/destra per −1/+1, **tieni premuto** per andare veloce
-- **Danno da comandante** per avversario (letale a 21, scala automaticamente la vita, supporta i partner)
+- **Danno da comandante** per avversario (letale a 21, scala automaticamente la vita, supporta i partner) — non compare in duello, dove c'è un solo avversario
 - Contatori **veleno** (letale a 10), **energia**, **esperienza**, **tassa comandante**
 - **Monarca** e **Iniziativa** (esclusivi, passano da un giocatore all'altro)
 - Morte automatica: vita ≤ 0, 10 veleno o 21 danni da comandante → teschio

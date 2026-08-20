@@ -660,6 +660,10 @@ function maxCmdDmg(p) {
   return m;
 }
 
+/* In duello il danno da comandante non si traccia: c'e un solo avversario,
+   il chip mostrerebbe un numero solo e ruberebbe spazio al pannello. */
+function usesCmdDmg(state) { return state.players.length > 2; }
+
 function isDead(p) {
   return p.life <= 0 || p.poison >= LETHAL_POISON || maxCmdDmg(p) >= LETHAL_CMD;
 }
@@ -681,6 +685,9 @@ function deserialize(str) {
     ['poison', 'energy', 'exp', 'tax'].forEach(k => { if (typeof p[k] !== 'number') p[k] = 0; });
     if (!p.cmd || typeof p.cmd !== 'object') p.cmd = {};
   });
+  // un salvataggio a 2 giocatori fatto prima non deve restare con un teschio
+  // da 21 danni che l'interfaccia non mostra piu e nessuno puo correggere
+  if (!usesCmdDmg(s)) s.players.forEach(p => { p.cmd = {}; });
   return s;
 }
 
@@ -689,7 +696,7 @@ function chooseStarter(count, rng) {
 }
 
 if (typeof globalThis !== 'undefined') {
-  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, isDead, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
+  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, usesCmdDmg, isDead, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
 }
 
 /* ================= Stato runtime ================= */
@@ -826,7 +833,7 @@ function renderPanel(pid) {
   const badges = [];
   // Un chip per avversario, sempre visibile: sostituisce il vecchio badge
   // riassuntivo ⚔️ e permette di segnare il danno senza aprire la scheda
-  state.players.forEach(o => {
+  if (usesCmdDmg(state)) state.players.forEach(o => {
     if (o.id === pid) return;
     const v = p.cmd[o.id] || 0;
     badges.push('<button class="opp-chip' + (v >= LETHAL_CMD ? ' warn' : (v > 0 ? ' hit' : '')) +
@@ -844,7 +851,7 @@ function renderPanel(pid) {
   if (state.initiative === pid) badges.push('<span class="badge">&#129517;</span>');
   // i segnalini (icona + numero) sono più larghi dei chip: contano doppio
   // nel calcolo della dimensione (vedi --chips nel CSS di .p-badges)
-  const chips = state.players.length - 1;
+  const chips = usesCmdDmg(state) ? state.players.length - 1 : 0;
   const units = chips + 2 * (badges.length - chips) + 1; // +1 per l'ingranaggio
   badges.push('<button class="p-gear" data-gear aria-label="Impostazioni giocatore">&#9881;</button>');
   const row = el.querySelector('.p-badges');
@@ -985,13 +992,15 @@ function openPlayerSheet(pid) {
   const p = state.players[pid];
   let html = '<div class="sheet-title">' + escapeHtml(p.name) + '</div>';
 
-  const opponents = state.players.filter(o => o.id !== pid);
-  html += '<div class="sheet-section"><div class="sheet-label">Danno da comandante (letale a 21)</div>';
-  opponents.forEach(o => {
-    const v = p.cmd[o.id] || 0;
-    html += stepperRow('da ' + escapeHtml(o.name), '', v, v >= LETHAL_CMD, 'cmd:' + o.id + ':-1', 'cmd:' + o.id + ':1', COLOR_GLOW[o.color]);
-  });
-  html += '</div>';
+  if (usesCmdDmg(state)) {
+    html += '<div class="sheet-section"><div class="sheet-label">Danno da comandante (letale a 21)</div>';
+    state.players.forEach(o => {
+      if (o.id === pid) return;
+      const v = p.cmd[o.id] || 0;
+      html += stepperRow('da ' + escapeHtml(o.name), '', v, v >= LETHAL_CMD, 'cmd:' + o.id + ':-1', 'cmd:' + o.id + ':1', COLOR_GLOW[o.color]);
+    });
+    html += '</div>';
+  }
 
   html += '<div class="sheet-section"><div class="sheet-label">Contatori</div>';
   html += stepperRow('&#9760;&#65039; Veleno', '(letale a 10)', p.poison, p.poison >= LETHAL_POISON, 'ctr:poison:-1', 'ctr:poison:1');
