@@ -44,7 +44,7 @@ function makeEl(id) {
 }
 
 const IDS = ['setup', 'game', 'board', 'hub', 'sheet', 'overlay', 'toast',
-  'countRow', 'lifeRow', 'startBtn', 'undoBtn', 'diceBtn', 'menuBtn'];
+  'countRow', 'lifeRow', 'startBtn', 'resetBtn', 'diceBtn', 'menuBtn'];
 const elements = new Map(IDS.map(id => [id, makeEl(id)]));
 
 const sandbox = {
@@ -210,6 +210,27 @@ test('deserialize normalizza salvataggi incompleti', () => {
   eq(s.monarch, null);
 });
 
+test('resetScores riporta tutto a inizio partita', () => {
+  const s = L.newGame(4, 40);
+  L.applyLife(s, 0, -15);
+  L.applyCmdDmg(s, 1, 0, 6);
+  L.applyCounter(s, 2, 'poison', 4);
+  L.applyCounter(s, 2, 'tax', 3);
+  L.setMonarch(s, 3);
+  L.setInitiative(s, 0);
+  L.resetScores(s);
+  s.players.forEach((p, i) => {
+    eq(p.life, 40, 'vita giocatore ' + i + ':');
+    eq(p.poison, 0, 'veleno:');
+    eq(p.tax, 0, 'tassa:');
+    eq(Object.keys(p.cmd).length, 0, 'danno comandante:');
+  });
+  eq(s.monarch, null, 'monarca:');
+  eq(s.initiative, null, 'iniziativa:');
+  eq(s.players.length, 4, 'i giocatori restano gli stessi:');
+  eq(s.players[0].name, 'Giocatore 1', 'i nomi restano:');
+});
+
 test('chooseStarter restituisce indice valido', () => {
   for (let i = 0; i < 50; i++) {
     const idx = L.chooseStarter(4);
@@ -282,6 +303,26 @@ test('la scheda mostra il comandante in multiplayer ma non in duello', () => {
   app.openPlayerSheet(0);
   assert(!sheet.innerHTML.includes('Danno da comandante'), 'in duello la sezione non ci deve essere');
   app.closeSheet();
+});
+
+test('il menu offre annulla al posto della rivincita', () => {
+  app.setState(L.newGame(4, 40));
+  app.openMenuSheet();
+  assert(/Annulla ultima mossa/.test(sheet.innerHTML), 'voce annulla nel menu');
+  assert(!/Rivincita/.test(sheet.innerHTML), 'la rivincita non e piu nel menu');
+  app.closeSheet();
+});
+
+test('annulla dal menu ripristina lo stato precedente', () => {
+  app.setState(L.newGame(4, 40));
+  app.openPlayerSheet(0);
+  fire('ctr:poison:2');
+  eq(app.getState().players[0].poison, 2, 'veleno applicato:');
+  app.closeSheet();
+  app.openMenuSheet();
+  assert(!/disabled/.test(sheet.innerHTML), 'con la cronologia piena il tasto e attivo');
+  fire('undo');
+  eq(app.getState().players[0].poison, 0, 'veleno dopo annulla:');
 });
 
 console.log('\n' + passed + ' passati, ' + failed + ' falliti');

@@ -490,6 +490,7 @@ input { font: inherit; }
   text-align: center;
 }
 .menu-btn.danger { color: var(--danger); border-color: #4a2626; }
+.menu-btn[disabled] { opacity: 0.45; }
 .menu-info { text-align: center; color: var(--ink-dim); font-size: 13px; margin-bottom: 14px; }
 
 /* Dadi */
@@ -576,7 +577,7 @@ input { font: inherit; }
 <div id="game" hidden>
   <div id="board"></div>
   <div id="hub">
-    <button class="hub-btn" id="undoBtn" aria-label="Annulla">&#8630;</button>
+    <button class="hub-btn" id="resetBtn" aria-label="Ripristina punteggio">&#8635;</button>
     <button class="hub-btn" id="diceBtn" aria-label="Dadi">&#127922;</button>
     <button class="hub-btn" id="menuBtn" aria-label="Menu">&#9776;</button>
   </div>
@@ -668,6 +669,19 @@ function isDead(p) {
   return p.life <= 0 || p.poison >= LETHAL_POISON || maxCmdDmg(p) >= LETHAL_CMD;
 }
 
+/* Ripristina il punteggio: stessi giocatori e stessa vita iniziale,
+   tutto il resto azzerato. E' la vecchia "rivincita", ora nell'hub. */
+function resetScores(state) {
+  state.players.forEach(p => {
+    p.life = state.startLife;
+    p.poison = 0; p.energy = 0; p.exp = 0; p.tax = 0;
+    p.cmd = {};
+  });
+  state.monarch = null;
+  state.initiative = null;
+  state.startedAt = Date.now();
+}
+
 function serialize(state) { return JSON.stringify(state); }
 /* Oltre a validare, normalizza salvataggi vecchi o corrotti riempiendo i campi mancanti */
 function deserialize(str) {
@@ -696,7 +710,7 @@ function chooseStarter(count, rng) {
 }
 
 if (typeof globalThis !== 'undefined') {
-  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, usesCmdDmg, isDead, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
+  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, usesCmdDmg, isDead, resetScores, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
 }
 
 /* ================= Stato runtime ================= */
@@ -1054,24 +1068,21 @@ function openMenuSheet() {
     (fullscreenAvailable()
       ? '<button class="menu-btn" data-act="fullscreen">&#9974; ' + (isFullscreen() ? 'Esci da schermo intero' : 'Schermo intero') + '</button>'
       : '') +
-    '<button class="menu-btn" data-act="rematch">&#8635; Rivincita (stessi giocatori)</button>' +
+    '<button class="menu-btn" data-act="undo"' + (history.length ? '' : ' disabled') + '>&#8630; Annulla ultima mossa' +
+      (history.length ? ' <span class="s-sub">(' + history.length + ')</span>' : '') + '</button>' +
     '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
     '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
   openSheet(html, false, a => {
     if (a === 'close') closeSheet();
     else if (a === 'fullscreen') { toggleFullscreen(); closeSheet(); }
-    else if (a === 'rematch') {
-      if (!confirm('Ricominciare la partita con gli stessi giocatori?')) return;
-      pushHistory();
-      state.players.forEach(p => { p.life = state.startLife; p.poison = 0; p.energy = 0; p.exp = 0; p.tax = 0; p.cmd = {}; });
-      state.monarch = null;
-      state.initiative = null;
-      state.startedAt = Date.now();
-      renderAll();
+    else if (a === 'undo') {
+      // undo() rimpiazza l'oggetto state: il tavolo va ricostruito, non solo ridisegnato
+      if (!undo()) { toast('Niente da annullare'); return; }
+      buildBoard();
       save();
       closeSheet();
-      toast('Nuova partita!');
+      toast('Annullato');
     } else if (a === 'new') {
       if (!confirm('Tornare al setup? La partita corrente andrà persa.')) return;
       clearSaved();
@@ -1296,9 +1307,13 @@ function boot() {
     showGame();
   });
 
-  $('undoBtn').addEventListener('click', () => {
-    if (undo()) { buildBoard(); save(); toast('Annullato'); }
-    else toast('Niente da annullare');
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('Ripristinare il punteggio? Vita e segnalini tornano come a inizio partita.')) return;
+    pushHistory();
+    resetScores(state);
+    renderAll();
+    save();
+    toast('Punteggio ripristinato');
   });
   $('diceBtn').addEventListener('click', openDiceSheet);
   $('menuBtn').addEventListener('click', openMenuSheet);

@@ -13,7 +13,8 @@ PWA installabile, funziona offline. Live: **https://d-jacki.github.io/mtg-segnap
 - **Monarca** e **Iniziativa** (esclusivi, passano da un giocatore all'altro)
 - Morte automatica: vita ≤ 0, 10 veleno o 21 danni da comandante → teschio
 - **Dadi** d4–d20, moneta e "chi inizia?"
-- **Annulla** (fino a 60 mosse), rivincita rapida dal menu
+- **Ripristina punteggio** (↻ nell'hub): stessi giocatori, tutto azzerato, con conferma
+- **Annulla** l'ultima mossa dal menu (fino a 60 mosse)
 - **Schermo sempre acceso** durante la partita (Wake Lock)
 - La partita **si salva da sola**: se chiudi l'app, riprende da dove eri
 - Ogni giocatore ha nome e colore mana personalizzabili (⚙ sul pannello)
