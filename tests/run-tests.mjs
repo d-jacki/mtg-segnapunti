@@ -17,8 +17,10 @@ function makeEl(id) {
     id: id || '',
     children: [],
     listeners: {},
-    style: {},
+    style: { setProperty(k, v) { this[k] = v; } },
     dataset: {},
+    className: '',
+    disabled: false,
     innerHTML: '',
     textContent: '',
     value: '',
@@ -323,6 +325,93 @@ test('annulla dal menu ripristina lo stato precedente', () => {
   assert(!/disabled/.test(sheet.innerHTML), 'con la cronologia piena il tasto e attivo');
   fire('undo');
   eq(app.getState().players[0].poison, 0, 'veleno dopo annulla:');
+});
+
+// Pannelli finti: servono a tapLife/renderPanel, che senza pannello non fanno nulla
+for (let i = 0; i < 4; i++) elements.set('panel-' + i, makeEl('panel-' + i));
+
+test('annulla non unisce tap di vita separati da un\'altra mossa', () => {
+  app.setState(L.newGame(4, 40));
+  app.tapLife(0, -1);
+  app.openPlayerSheet(0);
+  fire('cmd:1:1');
+  app.closeSheet();
+  app.tapLife(0, -1); // entro la finestra della raffica, ma dopo il danno
+  eq(app.getState().players[0].life, 37, 'vita prima di annullare:');
+  app.openMenuSheet();
+  fire('undo');
+  eq(app.getState().players[0].life, 38, 'annulla toglie solo l\'ultimo tap:');
+  eq(app.getState().players[0].cmd[1], 1, 'il danno da comandante resta:');
+});
+
+test('i tap ravvicinati sullo stesso giocatore restano un solo annulla', () => {
+  app.setState(L.newGame(4, 40));
+  app.openPlayerSheet(1);
+  fire('ctr:energy:1'); // una mossa prima, così la cronologia non è vuota
+  app.closeSheet();
+  app.tapLife(1, -1);
+  app.tapLife(1, -1);
+  app.tapLife(1, -1);
+  app.openMenuSheet();
+  fire('undo');
+  eq(app.getState().players[1].life, 40, 'vita dopo annulla:');
+  eq(app.getState().players[1].energy, 1, 'energia intatta:');
+});
+
+test('la scheda segue la rotazione del pannello', () => {
+  app.setState(L.newGame(4, 40));
+  // pannello girato di lato dalla container query
+  sandbox.getComputedStyle = () => ({ getPropertyValue: () => ' 90deg' });
+  app.openPlayerSheet(2);
+  eq(sheet.style['--sheet-rot'], '90deg', 'rotazione:');
+  assert(sheet.classList.contains('side'), 'di lato la scheda scambia i limiti');
+  app.closeSheet();
+  // senza stile calcolato: la riga in alto resta capovolta, quella in basso dritta
+  delete sandbox.getComputedStyle;
+  app.openPlayerSheet(2);
+  eq(sheet.style['--sheet-rot'], '180deg', 'riga in alto:');
+  assert(!sheet.classList.contains('side'), 'capovolta non è di lato');
+  app.closeSheet();
+  app.openPlayerSheet(0);
+  eq(sheet.style['--sheet-rot'], '0deg', 'riga in basso:');
+  app.closeSheet();
+  app.openMenuSheet();
+  eq(sheet.style['--sheet-rot'], '0deg', 'il menu non ruota:');
+  app.closeSheet();
+});
+
+test('vita personalizzata fuori range blocca "Inizia"', () => {
+  const lifeRow = elements.get('lifeRow');
+  const start = elements.get('startBtn');
+  const custom = lifeRow.children[lifeRow.children.length - 1];
+  custom.value = '0';
+  custom.dispatch('input', {});
+  assert(start.disabled, 'con 0 non si parte');
+  assert(custom.classList.contains('invalid'), 'campo segnato');
+  custom.value = '1000';
+  custom.dispatch('input', {});
+  assert(start.disabled, 'con 1000 non si parte');
+  custom.value = '25';
+  custom.dispatch('input', {});
+  assert(!start.disabled, 'con 25 si parte');
+  assert(!custom.classList.contains('invalid'), 'campo non piu segnato');
+  start.dispatch('click', {});
+  eq(app.getState().startLife, 25, 'vita iniziale:');
+});
+
+// Va per ultimo: richiama boot(), che registra di nuovo i listener
+test('la demo non tocca la partita salvata', () => {
+  const writes = [];
+  sandbox.localStorage = {
+    getItem() { return null; },
+    setItem(k) { writes.push('set ' + k); },
+    removeItem(k) { writes.push('remove ' + k); }
+  };
+  sandbox.location.search = '?demo4';
+  app.boot();
+  eq(app.getState().players.length, 4, 'partita demo avviata:');
+  app.tapLife(0, -1);
+  eq(writes.length, 0, 'scritture su localStorage:');
 });
 
 console.log('\n' + passed + ' passati, ' + failed + ' falliti');

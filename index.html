@@ -124,6 +124,8 @@ input { font: inherit; }
   letter-spacing: 0.5px;
 }
 #startBtn:active { transform: scale(0.97); }
+#startBtn:disabled { opacity: 0.45; }
+#customLife.invalid { border-color: var(--danger); color: var(--danger); }
 
 /* ---------- Tavolo ---------- */
 #game { height: 100dvh; position: relative; }
@@ -385,8 +387,16 @@ input { font: inherit; }
   border-radius: 22px;
   padding: 20px;
   -webkit-user-select: none;
+  /* stessa rotazione del pannello da cui si apre (vedi seatRotation) */
+  transform: rotate(var(--sheet-rot, 0deg));
 }
-#sheet.flip { transform: rotate(180deg); }
+/* Ruotata di 90° la scheda scambia i lati: la sua larghezza diventa l'altezza
+   che si vede sullo schermo e viceversa, quindi i limiti vanno invertiti */
+#sheet.side {
+  flex: none;
+  width: min(420px, calc(100dvh - 36px));
+  max-height: calc(100dvw - 36px);
+}
 .sheet-title {
   font-family: Georgia, serif;
   font-size: 22px;
@@ -722,10 +732,15 @@ let wakeLock = null;
 const deltaAcc = {};   // pid -> {sum, timer}
 const holdTimers = {}; // chiave zona -> {delay, interval}
 let lastBurst = { pid: -1, time: 0 };
+// ?demoN: partita di prova che non deve toccare quella salvata
+let demoMode = false;
 
 function pushHistory() {
   history.push(serialize(state));
   if (history.length > MAX_HISTORY) history.shift();
+  // qualunque altra mossa chiude la raffica di tap: quelli dopo sono un
+  // passo di annulla a sé (tapLife reimposta lastBurst subito dopo)
+  lastBurst = { pid: -1, time: 0 };
 }
 
 function undo() {
@@ -735,6 +750,7 @@ function undo() {
 }
 
 function save() {
+  if (demoMode) return;
   try { localStorage.setItem(SAVE_KEY, serialize(state)); } catch (e) {}
 }
 
@@ -747,6 +763,7 @@ function loadSaved() {
 }
 
 function clearSaved() {
+  if (demoMode) return;
   try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
 }
 
@@ -978,18 +995,32 @@ function bindZone(zone, pid, delta) {
    uno nuovo, così le azioni non vengono mai applicate più volte. */
 let sheetHandler = null;
 
-function openSheet(html, flip, onAction) {
+/* rot: rotazione da dare alla scheda ('0deg', '180deg', '±90deg') */
+function openSheet(html, rot, onAction) {
   const sheet = $('sheet');
   sheet.innerHTML = html;
-  sheet.classList.toggle('flip', !!flip);
+  const r = rot || '0deg';
+  sheet.style.setProperty('--sheet-rot', r);
+  sheet.classList.toggle('side', r === '90deg' || r === '-90deg');
   sheetHandler = onAction || null;
   $('overlay').classList.add('open');
   return sheet;
 }
 function closeSheet() { $('overlay').classList.remove('open'); sheetHandler = null; }
 
-function isFlipped(pid) {
-  return layoutRows(state.players.length)[0].includes(pid);
+/* Verso cui è girato il contenuto del pannello, così la scheda si apre
+   leggibile dal posto del giocatore. La rotazione di 90° la decide una
+   container query in CSS, quindi va letta dallo stile calcolato; dove non
+   si può (test) basta la riga: quella in alto è capovolta. */
+const SEAT_ROTATIONS = ['0deg', '90deg', '-90deg', '180deg'];
+function seatRotation(pid) {
+  const panel = $('panel-' + pid);
+  const inner = panel && panel.querySelector('.p-inner');
+  if (inner && typeof getComputedStyle === 'function') {
+    const rot = getComputedStyle(inner).getPropertyValue('--rot').trim();
+    if (SEAT_ROTATIONS.includes(rot)) return rot;
+  }
+  return layoutRows(state.players.length)[0].includes(pid) ? '180deg' : '0deg';
 }
 
 function stepperRow(label, sub, val, warn, minusAct, plusAct, chipColor) {
@@ -1037,7 +1068,7 @@ function openPlayerSheet(pid) {
 
   html += '<button class="sheet-close" data-act="close">Chiudi</button>';
 
-  const sheet = openSheet(html, isFlipped(pid), act => {
+  const sheet = openSheet(html, seatRotation(pid), act => {
     const parts = act.split(':');
     if (parts[0] === 'close') { closeSheet(); return; }
     pushHistory();
@@ -1073,7 +1104,7 @@ function openMenuSheet() {
     '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
     '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
-  openSheet(html, false, a => {
+  openSheet(html, null, a => {
     if (a === 'close') closeSheet();
     else if (a === 'fullscreen') { toggleFullscreen(); closeSheet(); }
     else if (a === 'undo') {
@@ -1110,7 +1141,7 @@ function openDiceSheet() {
     '<div id="diceResult"><span class="dr-sub">Scegli un dado</span></div>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
   let anim = null;
-  openSheet(html, false, act => {
+  openSheet(html, null, act => {
     const parts = act.split(':');
     const res = $('diceResult');
     clearInterval(anim);
@@ -1170,12 +1201,18 @@ function renderSetup() {
   custom.max = 999;
   custom.placeholder = '...';
   if (![20, 30, 40].includes(setupLife)) custom.value = setupLife;
+  // Un valore fuori range non deve far partire la partita con la vita di
+  // prima senza dirlo: si segna il campo e si blocca "Inizia" finché non
+  // si corregge o si sceglie un valore fisso
+  const start = $('startBtn');
+  start.disabled = false;
   custom.addEventListener('input', () => {
-    const v = parseInt(custom.value, 10);
-    if (v >= 1 && v <= 999) {
-      setupLife = v;
-      lifeRow.querySelectorAll('.choice').forEach(b => b.classList.remove('sel'));
-    }
+    const v = Number(custom.value);
+    const ok = Number.isInteger(v) && v >= 1 && v <= 999;
+    lifeRow.querySelectorAll('.choice').forEach(b => b.classList.remove('sel'));
+    custom.classList.toggle('invalid', !ok && custom.value !== '');
+    start.disabled = !ok;
+    if (ok) setupLife = v;
   });
   lifeRow.appendChild(custom);
 }
@@ -1300,7 +1337,9 @@ function boot() {
   renderSetup();
 
   $('startBtn').addEventListener('click', () => {
+    if ($('startBtn').disabled) return;
     goFullscreen();
+    demoMode = false; // dal setup parte una partita vera, anche se si veniva da ?demo
     history = [];
     state = newGame(setupCount, setupLife);
     save();
@@ -1337,6 +1376,7 @@ function boot() {
   const demo = ((location.hash || '') + (location.search || '')).match(/[#?]demo(\d)?\b/);
   const saved = loadSaved();
   if (demo) {
+    demoMode = true;
     state = newGame(clamp(Number(demo[1] || 4), 2, 6), 40);
     showGame();
   } else if (saved && saved.started) {
@@ -1354,7 +1394,7 @@ function boot() {
 
 if (IS_TEST) {
   globalThis.__app = {
-    boot, openPlayerSheet, openMenuSheet, openDiceSheet, closeSheet,
+    boot, openPlayerSheet, openMenuSheet, openDiceSheet, closeSheet, tapLife,
     setState: s => { state = s; },
     getState: () => state,
     getHistory: () => history
