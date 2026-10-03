@@ -368,6 +368,22 @@ test('annulla non unisce tap di vita separati da un\'altra mossa', () => {
   eq(app.getState().players[0].cmd[1], 1, 'il danno da comandante resta:');
 });
 
+test("il ripristino dall'hub chiede conferma dentro l'app", () => {
+  app.setState(L.newGame(4, 40));
+  app.tapLife(0, -5);
+  const reset = elements.get('resetBtn');
+  reset.dispatch('click', {});
+  eq(app.getState().players[0].life, 35, 'prima della conferma non cambia nulla:');
+  fire('close');
+  eq(app.getState().players[0].life, 35, 'annullato:');
+  reset.dispatch('click', {});
+  fire('ok');
+  eq(app.getState().players[0].life, 40, 'confermato:');
+  app.openMenuSheet();
+  fire('undo');
+  eq(app.getState().players[0].life, 35, 'il ripristino si annulla:');
+});
+
 test('i tap ravvicinati sullo stesso giocatore restano un solo annulla', () => {
   app.setState(L.newGame(4, 40));
   app.openPlayerSheet(1);

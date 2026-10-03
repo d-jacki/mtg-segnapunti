@@ -566,6 +566,8 @@ input { font: inherit; }
 .menu-btn.danger { color: var(--danger); border-color: #4a2626; }
 .menu-btn[disabled] { opacity: 0.45; }
 .menu-info { text-align: center; color: var(--ink-dim); font-size: 13px; margin-bottom: 14px; }
+/* sottotitolo dentro il titolo di una conferma: torna al carattere normale */
+.sheet-title .menu-info { font: 400 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; margin: 8px 0 4px; }
 
 /* Dadi */
 .dice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
@@ -1145,6 +1147,18 @@ function openSheet(html, rot, onAction, columns) {
 /* La ✕ in alto: si vede solo nelle schede larghe, dove sostituisce "Chiudi" */
 const SHEET_X = '<button class="sheet-x" data-act="close" aria-label="Chiudi">&#10005;</button>';
 
+/* Conferma dentro l'app al posto di confirm(): il dialogo del browser fa
+   uscire Chrome dallo schermo intero, e in più non si può ruotare */
+function askConfirm(text, okLabel, onOk) {
+  openSheet(
+    '<div class="sheet-title">' + text + '</div>' +
+    '<button class="menu-btn danger" data-act="ok">' + okLabel + '</button>' +
+    '<button class="sheet-close" data-act="close">Annulla</button>',
+    null,
+    act => { closeSheet(); if (act === 'ok') onOk(); }
+  );
+}
+
 function closeSheet() { $('overlay').classList.remove('open'); sheetHandler = null; }
 
 /* Verso cui è girato il contenuto del pannello, così la scheda si apre
@@ -1257,10 +1271,10 @@ function openMenuSheet() {
       closeSheet();
       toast('Annullato');
     } else if (a === 'new') {
-      if (!confirm('Tornare al setup? La partita corrente andrà persa.')) return;
-      clearSaved();
-      showSetup();
-      closeSheet();
+      askConfirm('Tornare al setup?<div class="menu-info">La partita in corso andrà persa.</div>', 'Nuova partita', () => {
+        clearSaved();
+        showSetup();
+      });
     }
   });
 }
@@ -1368,10 +1382,13 @@ function showSetup() {
 
 /* ================= Schermo intero =================
    L'API esige un gesto dell'utente: non si può chiedere il fullscreen
-   all'avvio. Da qui i due agganci: la voce nel menu e, quando si riprende
-   una partita salvata (che salta il bottone "Inizia"), il primo tocco sul
-   tavolo. Su Safari iPhone l'API non esiste: le funzioni non fanno nulla e
-   la voce di menu resta nascosta, lì si usa "Aggiungi alla schermata Home". */
+   all'avvio, né riprenderlo da soli quando il browser lo toglie (app in
+   background, schermo spento, gesto "indietro", tendina delle notifiche).
+   Per questo wantFs ricorda se il giocatore lo vuole, e il primo tocco
+   utile sul tavolo lo riattiva (vedi restoreFullscreenOnTap). Su Safari
+   iPhone l'API non esiste: le funzioni non fanno nulla e la voce di menu
+   resta nascosta, lì si usa "Aggiungi alla schermata Home". */
+let wantFs = false;
 /* Risolte a ogni chiamata, non una volta sola: il mini-DOM dei test non
    espone documentElement né matchMedia */
 function fsRoot() { return document.documentElement || null; }
@@ -1387,6 +1404,9 @@ function isFullscreen() {
 /* Con la PWA installata si è già a tutto schermo: la voce sarebbe inutile */
 function fullscreenAvailable() {
   if (!fsRequest() || typeof window.matchMedia !== 'function') return false;
+  // a schermo intero via API anche display-mode: fullscreen risulta vero:
+  // senza questo controllo sparirebbe la voce "Esci da schermo intero"
+  if (isFullscreen()) return true;
   return !window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
 }
 
@@ -1398,25 +1418,27 @@ function callFs(fn, ctx) {
 }
 
 function goFullscreen() {
-  if (!fullscreenAvailable() || isFullscreen()) return;
-  callFs(fsRequest(), fsRoot());
+  if (!fullscreenAvailable()) return;
+  wantFs = true;
+  if (!isFullscreen()) callFs(fsRequest(), fsRoot());
 }
 
 function toggleFullscreen() {
   if (!isFullscreen()) return goFullscreen();
+  wantFs = false; // uscito di proposito: non lo si riattiva al tocco dopo
   const exit = document.exitFullscreen || document.webkitExitFullscreen;
   if (exit) callFs(exit, document);
 }
 
-/* Un solo tocco, in fase di cattura e senza preventDefault: il tap vale
-   comunque come +/- vita, il fullscreen è un effetto collaterale. */
-function armFullscreenOnFirstTap() {
-  if (!fullscreenAvailable()) return;
-  const once = () => {
-    document.removeEventListener('pointerdown', once, true);
-    goFullscreen();
-  };
-  document.addEventListener('pointerdown', once, true);
+/* Listener fisso, in fase di cattura e senza preventDefault: il tap vale
+   comunque come +/- vita, il fullscreen è un effetto collaterale.
+   Va su pointerup e non su pointerdown: col dito il browser concede il
+   fullscreen solo da pointerup/touchend/click, un pointerdown "touch" non
+   conta come gesto e la richiesta viene rifiutata in silenzio. */
+function restoreFullscreenOnTap() {
+  document.addEventListener('pointerup', () => {
+    if (wantFs && state && !isFullscreen()) goFullscreen();
+  }, true);
 }
 
 /* ================= Orientamento =================
@@ -1492,14 +1514,15 @@ function boot() {
     showGame();
   });
 
-  $('resetBtn').addEventListener('click', () => {
-    if (!confirm('Ripristinare il punteggio? Vita e segnalini tornano come a inizio partita.')) return;
-    pushHistory();
-    resetScores(state);
-    renderAll();
-    save();
-    toast('Punteggio ripristinato');
-  });
+  $('resetBtn').addEventListener('click', () => askConfirm(
+    'Ripristinare il punteggio?<div class="menu-info">Vita e segnalini tornano come a inizio partita. Si può annullare dal menu.</div>',
+    'Ripristina', () => {
+      pushHistory();
+      resetScores(state);
+      renderAll();
+      save();
+      toast('Punteggio ripristinato');
+    }));
   $('diceBtn').addEventListener('click', openDiceSheet);
   $('menuBtn').addEventListener('click', openMenuSheet);
   $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeSheet(); });
@@ -1514,6 +1537,8 @@ function boot() {
     if (document.visibilityState === 'visible' && state && state.started) requestWakeLock();
   });
 
+  restoreFullscreenOnTap();
+
   // Entrati a schermo intero il lock diventa concesso: si riprova
   document.addEventListener('fullscreenchange', applyOrientationLock);
   document.addEventListener('webkitfullscreenchange', applyOrientationLock);
@@ -1527,10 +1552,10 @@ function boot() {
     showGame();
   } else if (saved && saved.started) {
     // Riprende automaticamente la partita salvata: nessun gesto da cui
-    // chiedere il fullscreen, lo si aggancia al primo tocco
+    // chiedere il fullscreen, ci pensa il primo tocco
     state = saved;
     showGame();
-    armFullscreenOnFirstTap();
+    if (fullscreenAvailable()) wantFs = true;
   }
 
   if ('serviceWorker' in navigator) {
