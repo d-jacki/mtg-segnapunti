@@ -27,6 +27,9 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Georgia di serie usa cifre "old-style" (3, 4, 5, 7, 9 scendono sotto
+     la riga): per un contavita servono tutte alte uguali */
+  font-variant-numeric: lining-nums;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
@@ -56,9 +59,9 @@ input { font: inherit; }
 /* ---------- Setup ---------- */
 #setup {
   height: 100dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   gap: 28px;
   padding: 24px calc(16px + env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
@@ -71,6 +74,19 @@ input { font: inherit; }
   letter-spacing: 0.5px;
 }
 #setup h1 span { color: #f5c86b; }
+/* Centrato con i margini automatici e non con justify-content: se il
+   contenuto è più alto della finestra resta scorrevole, invece di uscire
+   anche dal bordo alto dove non si arriva più */
+#setup > :first-child { margin-top: auto; }
+#setup > :last-child { margin-bottom: auto; }
+/* Telefono in orizzontale: niente decorazioni, spazi stretti */
+@media (max-height: 520px) {
+  #setup { gap: 14px; padding-top: 14px; }
+  #setup h1 { font-size: 30px; }
+  #setup .setup-sub, #setup .pips { display: none; }
+  #setup .choice, #setup #customLife { padding: 9px 10px; font-size: 19px; }
+  #setup #startBtn { padding: 13px 44px; }
+}
 .setup-sub {
   color: var(--ink-dim);
   font-size: 13px;
@@ -158,9 +174,6 @@ input { font: inherit; }
   --rot: 0deg;
   --cw: 1cqw;
   --ch: 1cqh;
-  /* quanta altezza del contenuto può prendersi la cifra della vita */
-  --life-v: 56;
-  --life-vl: 50;
   position: absolute;
   top: 50%; left: 50%;
   width: 100%;
@@ -168,10 +181,13 @@ input { font: inherit; }
   transform: translate(-50%, -50%) rotate(var(--rot));
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  padding: calc(4 * var(--ch)) 8px calc(5 * var(--ch));
 }
 .panel[data-row="top"] .p-inner { --rot: 180deg; }
+/* Nei pannelli non girati di lato il bordo alto del contenuto guarda il
+   centro del tavolo, dove sta l'hub: la cifra non deve finirci sotto */
+.panel[data-side="center"] .p-inner { padding-top: max(calc(4 * var(--ch)), 34px); }
 
 /* Pannello nettamente più alto che largo: ruotando di 90° la cifra della
    vita usa il lato lungo e diventa circa il doppio. La colonna centrale
@@ -183,59 +199,56 @@ input { font: inherit; }
     height: 100cqw;
     --cw: 1cqh;
     --ch: 1cqw;
-    /* ruotato il lato lungo è abbondante: la cifra può crescere in altezza
-       fin quasi a toccare la fascia di nome e badge */
-    --life-v: 66;
-    --life-vl: 58;
   }
   .panel[data-side="left"] .p-inner { --rot: 90deg; }
   .panel[data-side="right"] .p-inner { --rot: -90deg; }
 }
 
-.p-name {
-  position: absolute;
-  top: 7%;
-  left: 12px; right: 12px;
-  text-align: center;
-  font-size: clamp(11px, calc(5 * var(--ch)), 16px);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--p-text) 65%, transparent);
+/* La cifra vive in un riquadro tutto suo, che prende lo spazio lasciato
+   libero dalla riga dei badge: essendo un container, la cifra si dimensiona
+   su quello (cqw/cqh qui sotto sono del riquadro, non del pannello) e non
+   può più finire sopra i chip, qualunque sia la rotazione. */
+.p-lifebox {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+.p-lifewrap { position: relative; line-height: 1; }
 .p-life {
+  display: block;
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 700;
-  font-size: min(calc(38 * var(--cw)), calc(var(--life-v) * var(--ch)));
+  font-size: min(46cqw, 82cqh);
   line-height: 1;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   text-shadow: 0 0 28px color-mix(in srgb, var(--p-glow) 45%, transparent);
-  pointer-events: none;
   transition: color 0.2s;
 }
 .p-life.low { color: var(--danger); }
-.p-life.long { font-size: min(calc(30 * var(--cw)), calc(var(--life-vl) * var(--ch))); }
+.p-life.long { font-size: min(31cqw, 74cqh); }
 /* Riga in fondo al pannello: un chip per avversario (danno da comandante) e
    i segnalini attivi. Tap = +1, pressione lunga = -1, senza aprire la scheda.
    La riga non intercetta i tocchi, solo i suoi bottoni: così i badge
    puramente informativi lasciano passare il tap alle zone della vita. */
 .p-badges {
-  position: absolute;
-  bottom: 6%;
-  left: 8px; right: 8px;
+  position: relative;
+  flex: none;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 6px;
   /* --chips (dal render) è quanti elementi ci sono in riga: la dimensione
-     scende quando sono tanti, così la riga non va mai a capo finendo sopra
-     l'ingranaggio. Senza wrap l'altezza della riga resta prevedibile. */
-  font-size: min(clamp(11px, calc(5 * var(--ch)), 15px), calc(34 * var(--cw) / var(--chips, 1)));
+     scende quando sono tanti, ma non sotto gli 11px. Nei pannelli stretti
+     (colonna centrale a 5-6) la riga va a capo: è nel flusso, quindi è la
+     cifra della vita a fare spazio, non c'è più rischio di sovrapporsi. */
+  font-size: max(11px, min(clamp(11px, calc(5 * var(--ch)), 15px), calc(34 * var(--cw) / var(--chips, 1))));
   pointer-events: none;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 4px;
   z-index: 2;
 }
 .p-badges button { pointer-events: auto; position: relative; }
@@ -290,24 +303,37 @@ input { font: inherit; }
 .zone .hint {
   font-size: clamp(16px, calc(10 * var(--ch)), 26px);
   color: color-mix(in srgb, var(--p-text) 22%, transparent);
-  padding: 0 14px;
+  padding: 0 clamp(4px, calc(3 * var(--cw)), 14px);
   pointer-events: none;
 }
 .zone:active { background: color-mix(in srgb, var(--p-glow) 8%, transparent); }
 
-/* Chip delta */
+/* Chip delta: accanto alla cifra, in alto a destra, dove nei pannelli
+   larghi e bassi c'è sempre spazio; nei riquadri stretti (colonna
+   centrale, duello) va sopra, dove lo spazio è in verticale. */
 .delta {
   position: absolute;
-  top: 16%;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0.05em;
+  left: 100%;
+  margin-left: 0.25em;
   font-family: Georgia, serif;
-  font-size: clamp(15px, calc(10 * var(--ch)), 26px);
+  font-size: clamp(16px, 18cqh, 30px);
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   color: var(--p-glow);
   opacity: 0;
   transition: opacity 0.25s;
-  pointer-events: none;
+}
+@container (aspect-ratio < 1.1) {
+  .delta {
+    top: auto;
+    bottom: 100%;
+    left: 50%;
+    margin: 0 0 0.3em;
+    transform: translateX(-50%);
+    font-size: clamp(15px, 9cqw, 28px);
+  }
 }
 .delta.show { opacity: 1; }
 
@@ -326,19 +352,18 @@ input { font: inherit; }
 }
 .p-gear:active { transform: scale(0.88); }
 
-/* Morte */
-.panel.dead .p-life, .panel.dead .p-badges, .panel.dead .p-name { opacity: 0.25; }
+/* Morte: il teschio prende il posto della cifra (sta nel suo stesso
+   riquadro, cq qui sono del riquadro). I badge restano leggibili a metà:
+   dicono perché si è morti, ad esempio il chip rosso a 21. */
+.panel.dead .p-lifewrap { display: none; }
+.panel.dead .p-badges { opacity: 0.5; }
 .p-skull {
-  position: absolute;
-  inset: 0;
   display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: min(calc(24 * var(--cw)), calc(34 * var(--ch)));
-  pointer-events: none;
+  font-size: min(40cqw, 70cqh);
+  line-height: 1;
   filter: grayscale(0.4);
 }
-.panel.dead .p-skull { display: flex; }
+.panel.dead .p-skull { display: block; }
 
 /* ---------- Hub centrale ---------- */
 #hub {
@@ -380,7 +405,7 @@ input { font: inherit; }
 #overlay.open { display: flex; }
 #sheet {
   width: min(420px, 100%);
-  max-height: 86dvh;
+  max-height: calc(100dvh - 36px);
   overflow-y: auto;
   background: #12161d;
   border: 1px solid var(--line);
@@ -392,11 +417,50 @@ input { font: inherit; }
 }
 /* Ruotata di 90° la scheda scambia i lati: la sua larghezza diventa l'altezza
    che si vede sullo schermo e viceversa, quindi i limiti vanno invertiti */
+@media (max-height: 420px) { #sheet { padding: 14px 18px; } }
 #sheet.side {
   flex: none;
   width: min(420px, calc(100dvh - 36px));
   max-height: calc(100dvw - 36px);
 }
+/* Scheda larga e bassa (telefono in orizzontale, o scheda girata di lato
+   su un telefono in verticale): le sezioni si affiancano in colonne invece
+   di impilarsi, così sta tutto senza scorrere. Il "Chiudi" in fondo
+   diventa una ✕ in alto, che non ruba una riga. */
+#sheet { position: relative; }
+#sheet.wide { width: min(900px, 100%); max-height: calc(100dvh - 36px); padding: 14px 18px 16px; }
+#sheet.wide.side { width: min(900px, calc(100dvh - 36px)); max-height: calc(100dvw - 36px); }
+.sheet-x { display: none; }
+#sheet.wide .sheet-x {
+  display: flex;
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 40px; height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--ink-dim);
+}
+#sheet.wide .sheet-x:active { background: #1c222b; }
+#sheet.wide .sheet-close { display: none; }
+#sheet.wide .sheet-title { margin-bottom: 8px; font-size: 20px; }
+#sheet.wide .sheet-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 22px;
+}
+#sheet.wide .sheet-section { margin-bottom: 12px; }
+#sheet.wide .stepper { padding: 4px 0; gap: 6px; }
+#sheet.wide .stepper .s-name { font-size: 14px; gap: 6px; }
+#sheet.wide .s-sub { display: block; }
+#sheet.wide .stepper .s-val { min-width: 30px; font-size: 20px; }
+#sheet.wide .s-btn { width: 38px; height: 38px; }
+#sheet.wide .toggle { padding: 10px 6px; }
+#sheet.wide #nameInput { padding: 9px; }
+#sheet.wide .swatches { gap: 8px; }
+#sheet.wide .swatch { width: 32px; height: 32px; }
 .sheet-title {
   font-family: Georgia, serif;
   font-size: 22px;
@@ -428,7 +492,7 @@ input { font: inherit; }
   font-weight: 700;
   min-width: 40px;
   text-align: center;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .stepper .s-val.warn { color: var(--danger); }
 .s-btn {
@@ -610,6 +674,7 @@ const LETHAL_POISON = 10;
 const LETHAL_CMD = 21;
 const MAX_HISTORY = 60;
 const SAVE_KEY = 'segnapunti-mtg-v1';
+const PREFS_KEY = 'segnapunti-mtg-prefs';
 
 /* ================= Logica pura (testabile) ================= */
 function newGame(count, startLife) {
@@ -663,6 +728,35 @@ function setMonarch(state, pid) {
 
 function setInitiative(state, pid) {
   state.initiative = state.initiative === pid ? null : pid;
+}
+
+/* I chip del danno da comandante distinguono gli avversari solo dal
+   colore: due giocatori con lo stesso colore sarebbero indistinguibili.
+   Chi sceglie un colore già preso lo scambia con chi ce l'aveva. */
+function setColor(state, pid, color) {
+  const p = state.players[pid];
+  const other = state.players.find(o => o.id !== pid && o.color === color);
+  if (other) other.color = p.color;
+  p.color = color;
+}
+
+/* Nomi e colori dell'ultima partita passano alla nuova: di solito si
+   rigioca con le stesse persone negli stessi posti. I posti in più
+   prendono i colori rimasti liberi, così restano tutti diversi. */
+function applyRoster(state, roster) {
+  if (!Array.isArray(roster)) return;
+  const used = new Set();
+  const free = [];
+  state.players.forEach((p, i) => {
+    const r = roster[i] || {};
+    if (typeof r.name === 'string' && r.name) p.name = r.name.slice(0, 18);
+    if (COLORS.includes(r.color) && !used.has(r.color)) { p.color = r.color; used.add(r.color); }
+    else free.push(p);
+  });
+  free.forEach(p => {
+    p.color = COLORS.find(c => !used.has(c));
+    used.add(p.color);
+  });
 }
 
 function maxCmdDmg(p) {
@@ -720,7 +814,7 @@ function chooseStarter(count, rng) {
 }
 
 if (typeof globalThis !== 'undefined') {
-  globalThis.__logic = { newGame, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, usesCmdDmg, isDead, resetScores, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
+  globalThis.__logic = { newGame, setColor, applyRoster, applyLife, applyCmdDmg, applyCounter, setMonarch, setInitiative, maxCmdDmg, usesCmdDmg, isDead, resetScores, serialize, deserialize, chooseStarter, clamp, COLORS, LETHAL_POISON, LETHAL_CMD };
 }
 
 /* ================= Stato runtime ================= */
@@ -752,6 +846,7 @@ function undo() {
 function save() {
   if (demoMode) return;
   try { localStorage.setItem(SAVE_KEY, serialize(state)); } catch (e) {}
+  savePrefs();
 }
 
 function loadSaved() {
@@ -759,6 +854,26 @@ function loadSaved() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     return deserialize(raw);
+  } catch (e) { return null; }
+}
+
+/* Ultima configurazione usata: numero di giocatori, vita, nomi e colori.
+   Sopravvive a "Nuova partita", che cancella solo la partita in corso. */
+function savePrefs() {
+  if (demoMode || !state) return;
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      count: state.players.length,
+      life: state.startLife,
+      roster: state.players.map(p => ({ name: p.name, color: p.color }))
+    }));
+  } catch (e) {}
+}
+
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
+    return p && typeof p === 'object' ? p : null;
   } catch (e) { return null; }
 }
 
@@ -830,11 +945,10 @@ function buildBoard() {
       // e zone di tap, che restano "meno a sinistra" per chi guarda
       el.innerHTML =
         '<div class="p-inner">' +
-        '<div class="p-name"></div>' +
-        '<div class="p-life"></div>' +
+        '<div class="p-lifebox"><div class="p-lifewrap">' +
+        '<span class="p-life"></span><span class="delta"></span>' +
+        '</div><div class="p-skull">&#128128;</div></div>' +
         '<div class="p-badges"></div>' +
-        '<div class="delta"></div>' +
-        '<div class="p-skull">&#128128;</div>' +
         '<button class="zone minus" aria-label="Togli vita"><span class="hint">&minus;</span></button>' +
         '<button class="zone plus" aria-label="Aggiungi vita"><span class="hint">+</span></button>' +
         '</div>';
@@ -856,7 +970,8 @@ function renderPanel(pid) {
   if (!el) return;
   el.className = el.className.replace(/mana-\w/, 'mana-' + p.color);
   el.classList.toggle('dead', isDead(p));
-  el.querySelector('.p-name').textContent = p.name;
+  // il nome non sta più sul pannello: resta per chi usa lo screen reader
+  el.setAttribute('aria-label', p.name);
   const lifeEl = el.querySelector('.p-life');
   lifeEl.textContent = p.life;
   lifeEl.classList.toggle('low', p.life > 0 && p.life <= 5);
@@ -877,7 +992,7 @@ function renderPanel(pid) {
   if (p.poison > 0) badges.push(ctr('poison', '&#9760;&#65039;', p.poison, 'Veleno', p.poison >= LETHAL_POISON));
   if (p.energy > 0) badges.push(ctr('energy', '&#9889;', p.energy, 'Energia', false));
   if (p.exp > 0) badges.push(ctr('exp', '&#10022;', p.exp, 'Esperienza', false));
-  if (p.tax > 0) badges.push(ctr('tax', '&#129689;', '+' + p.tax * 2, 'Tassa comandante', false));
+  if (p.tax > 0) badges.push(ctr('tax', '&#9884;&#65039;', '+' + p.tax * 2, 'Tassa comandante', false));
   if (state.monarch === pid) badges.push('<span class="badge">&#128081;</span>');
   if (state.initiative === pid) badges.push('<span class="badge">&#129517;</span>');
   // i segnalini (icona + numero) sono più larghi dei chip: contano doppio
@@ -975,8 +1090,16 @@ function bindZone(zone, pid, delta) {
     stop(); // un secondo dito sulla stessa zona non deve orfanare il timer precedente
     tapLife(pid, delta);
     const t = holdTimers[key] = {};
+    // dopo ~1 secondo di ripetizione passa a salti di 5, più lenti: per un
+    // colpo da 15 non serve più tenere premuto quasi due secondi
+    let n = 0;
     t.delay = setTimeout(() => {
-      t.interval = setInterval(() => tapLife(pid, delta), 110);
+      t.interval = setInterval(() => {
+        tapLife(pid, delta);
+        if (++n < 9) return;
+        clearInterval(t.interval);
+        t.interval = setInterval(() => tapLife(pid, 5 * delta), 280);
+      }, 110);
     }, 450);
   };
   zone.addEventListener('pointerdown', start);
@@ -995,17 +1118,33 @@ function bindZone(zone, pid, delta) {
    uno nuovo, così le azioni non vengono mai applicate più volte. */
 let sheetHandler = null;
 
-/* rot: rotazione da dare alla scheda ('0deg', '180deg', '±90deg') */
-function openSheet(html, rot, onAction) {
+/* La scheda è "larga" quando, nel suo verso, c'è tanto spazio in larghezza
+   e poco in altezza: girata di lato su un telefono in verticale, o dritta
+   su un telefono in orizzontale. Solo le schede con le colonne lo usano. */
+function sheetIsWide(side) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (!vw || !vh) return false;
+  const w = (side ? vh : vw) - 36, h = (side ? vw : vh) - 36;
+  return w >= 560 && h < 700;
+}
+
+/* rot: rotazione da dare alla scheda ('0deg', '180deg', '±90deg')
+   columns: la scheda ha sezioni in .sheet-col che si possono affiancare */
+function openSheet(html, rot, onAction, columns) {
   const sheet = $('sheet');
   sheet.innerHTML = html;
   const r = rot || '0deg';
+  const side = r === '90deg' || r === '-90deg';
   sheet.style.setProperty('--sheet-rot', r);
-  sheet.classList.toggle('side', r === '90deg' || r === '-90deg');
+  sheet.classList.toggle('side', side);
+  sheet.classList.toggle('wide', !!columns && sheetIsWide(side));
   sheetHandler = onAction || null;
   $('overlay').classList.add('open');
   return sheet;
 }
+/* La ✕ in alto: si vede solo nelle schede larghe, dove sostituisce "Chiudi" */
+const SHEET_X = '<button class="sheet-x" data-act="close" aria-label="Chiudi">&#10005;</button>';
+
 function closeSheet() { $('overlay').classList.remove('open'); sheetHandler = null; }
 
 /* Verso cui è girato il contenuto del pannello, così la scheda si apre
@@ -1035,38 +1174,42 @@ function stepperRow(label, sub, val, warn, minusAct, plusAct, chipColor) {
 
 function openPlayerSheet(pid) {
   const p = state.players[pid];
-  let html = '<div class="sheet-title">' + escapeHtml(p.name) + '</div>';
+  // Tre colonne (danno da comandante, contatori, il resto): nella scheda
+  // stretta si impilano nello stesso ordine, in quella larga si affiancano
+  const cols = [];
 
   if (usesCmdDmg(state)) {
-    html += '<div class="sheet-section"><div class="sheet-label">Danno da comandante (letale a 21)</div>';
+    let cmd = '<div class="sheet-section"><div class="sheet-label">Danno da comandante (letale a 21)</div>';
     state.players.forEach(o => {
       if (o.id === pid) return;
       const v = p.cmd[o.id] || 0;
-      html += stepperRow('da ' + escapeHtml(o.name), '', v, v >= LETHAL_CMD, 'cmd:' + o.id + ':-1', 'cmd:' + o.id + ':1', COLOR_GLOW[o.color]);
+      cmd += stepperRow('da ' + escapeHtml(o.name), '', v, v >= LETHAL_CMD, 'cmd:' + o.id + ':-1', 'cmd:' + o.id + ':1', COLOR_GLOW[o.color]);
     });
-    html += '</div>';
+    cols.push(cmd + '</div>');
   }
 
-  html += '<div class="sheet-section"><div class="sheet-label">Contatori</div>';
-  html += stepperRow('&#9760;&#65039; Veleno', '(letale a 10)', p.poison, p.poison >= LETHAL_POISON, 'ctr:poison:-1', 'ctr:poison:1');
-  html += stepperRow('&#9889; Energia', '', p.energy, false, 'ctr:energy:-1', 'ctr:energy:1');
-  html += stepperRow('&#10022; Esperienza', '', p.exp, false, 'ctr:exp:-1', 'ctr:exp:1');
-  html += stepperRow('&#129689; Tassa comandante', '(+' + p.tax * 2 + ' mana)', p.tax, false, 'ctr:tax:-1', 'ctr:tax:1');
-  html += '</div>';
+  cols.push('<div class="sheet-section"><div class="sheet-label">Contatori</div>' +
+    stepperRow('&#9760;&#65039; Veleno', '(letale a 10)', p.poison, p.poison >= LETHAL_POISON, 'ctr:poison:-1', 'ctr:poison:1') +
+    stepperRow('&#9889; Energia', '', p.energy, false, 'ctr:energy:-1', 'ctr:energy:1') +
+    stepperRow('&#10022; Esperienza', '', p.exp, false, 'ctr:exp:-1', 'ctr:exp:1') +
+    stepperRow('&#9884;&#65039; Tassa comandante', '(+' + p.tax * 2 + ' mana)', p.tax, false, 'ctr:tax:-1', 'ctr:tax:1') +
+    '</div>');
 
-  html += '<div class="sheet-section"><div class="sheet-label">Stato</div><div class="toggle-row">' +
+  cols.push('<div class="sheet-section"><div class="sheet-label">Stato</div><div class="toggle-row">' +
     '<button class="toggle' + (state.monarch === pid ? ' on' : '') + '" data-act="monarch">&#128081; Monarca</button>' +
     '<button class="toggle' + (state.initiative === pid ? ' on' : '') + '" data-act="initiative">&#129517; Iniziativa</button>' +
-    '</div></div>';
-
-  html += '<div class="sheet-section"><div class="sheet-label">Nome</div>' +
-    '<input id="nameInput" maxlength="18" value="' + escapeHtml(p.name) + '"></div>';
-
-  html += '<div class="sheet-section"><div class="sheet-label">Colore</div><div class="swatches">' +
+    '</div></div>' +
+    '<div class="sheet-section"><div class="sheet-label">Nome</div>' +
+    '<input id="nameInput" maxlength="18" value="' + escapeHtml(p.name) + '"></div>' +
+    '<div class="sheet-section"><div class="sheet-label">Colore</div><div class="swatches">' +
     COLORS.map(c => '<button class="swatch' + (p.color === c ? ' sel' : '') + '" style="background:' + COLOR_GLOW[c] + '" data-act="color:' + c + '" aria-label="' + COLOR_NAMES[c] + '"></button>').join('') +
-    '</div></div>';
+    '</div></div>');
 
-  html += '<button class="sheet-close" data-act="close">Chiudi</button>';
+  const html =
+    SHEET_X +
+    '<div class="sheet-title">' + escapeHtml(p.name) + '</div>' +
+    '<div class="sheet-cols">' + cols.map(c => '<div class="sheet-col">' + c + '</div>').join('') + '</div>' +
+    '<button class="sheet-close" data-act="close">Chiudi</button>';
 
   const sheet = openSheet(html, seatRotation(pid), act => {
     const parts = act.split(':');
@@ -1076,11 +1219,11 @@ function openPlayerSheet(pid) {
     else if (parts[0] === 'ctr') applyCounter(state, pid, parts[1], Number(parts[2]));
     else if (parts[0] === 'monarch') setMonarch(state, pid);
     else if (parts[0] === 'initiative') setInitiative(state, pid);
-    else if (parts[0] === 'color') p.color = parts[1];
+    else if (parts[0] === 'color') setColor(state, pid, parts[1]);
     renderAll();
     save();
     openPlayerSheet(pid); // ridisegna la scheda con i valori aggiornati
-  });
+  }, true);
 
   let namePushed = false;
   sheet.querySelector('#nameInput').addEventListener('input', e => {
@@ -1101,8 +1244,7 @@ function openMenuSheet() {
       : '') +
     '<button class="menu-btn" data-act="undo"' + (history.length ? '' : ' disabled') + '>&#8630; Annulla ultima mossa' +
       (history.length ? ' <span class="s-sub">(' + history.length + ')</span>' : '') + '</button>' +
-    '<button class="menu-btn" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
-    '<button class="menu-btn danger" data-act="reset">&#128465; Azzera tutto</button>' +
+    '<button class="menu-btn danger" data-act="new">&#9998; Nuova partita (torna al setup)</button>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
   openSheet(html, null, a => {
     if (a === 'close') closeSheet();
@@ -1119,26 +1261,23 @@ function openMenuSheet() {
       clearSaved();
       showSetup();
       closeSheet();
-    } else if (a === 'reset') {
-      if (!confirm('Azzerare tutto e tornare al setup?')) return;
-      clearSaved();
-      setupCount = 4;
-      setupLife = 40;
-      showSetup();
-      closeSheet();
     }
   });
 }
 
 function openDiceSheet() {
   const html =
+    SHEET_X +
     '<div class="sheet-title">Dadi</div>' +
+    '<div class="sheet-cols"><div class="sheet-col">' +
     '<div class="dice-grid">' +
     [4, 6, 8, 10, 12, 20].map(n => '<button class="die-btn" data-act="d:' + n + '">d' + n + '</button>').join('') +
     '<button class="die-btn wide" data-act="coin">&#129689; Moneta</button>' +
     '</div>' +
     '<button class="menu-btn" data-act="starter">&#127919; Chi inizia?</button>' +
+    '</div><div class="sheet-col">' +
     '<div id="diceResult"><span class="dr-sub">Scegli un dado</span></div>' +
+    '</div></div>' +
     '<button class="sheet-close" data-act="close">Chiudi</button>';
   let anim = null;
   openSheet(html, null, act => {
@@ -1171,7 +1310,7 @@ function openDiceSheet() {
       void panel.offsetWidth;
       panel.classList.add('starter');
     }
-  });
+  }, true);
 }
 
 /* ================= Setup ================= */
@@ -1334,6 +1473,11 @@ function escapeHtml(s) {
 
 /* ================= Avvio ================= */
 function boot() {
+  const prefs = loadPrefs();
+  if (prefs) {
+    if (Number.isInteger(prefs.count) && prefs.count >= 2 && prefs.count <= 6) setupCount = prefs.count;
+    if (Number.isInteger(prefs.life) && prefs.life >= 1 && prefs.life <= 999) setupLife = prefs.life;
+  }
   renderSetup();
 
   $('startBtn').addEventListener('click', () => {
@@ -1342,6 +1486,8 @@ function boot() {
     demoMode = false; // dal setup parte una partita vera, anche se si veniva da ?demo
     history = [];
     state = newGame(setupCount, setupLife);
+    const prefs = loadPrefs();
+    if (prefs) applyRoster(state, prefs.roster);
     save();
     showGame();
   });

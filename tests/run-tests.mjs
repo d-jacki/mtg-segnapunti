@@ -25,6 +25,8 @@ function makeEl(id) {
     textContent: '',
     value: '',
     hidden: false,
+    attributes: {},
+    setAttribute(k, v) { this.attributes[k] = String(v); },
     classList: {
       _set: new Set(),
       add(c) { this._set.add(c); },
@@ -210,6 +212,28 @@ test('deserialize normalizza salvataggi incompleti', () => {
   eq(s.players[1].poison, 0);
   assert(s.players[1].cmd && typeof s.players[1].cmd === 'object', 'cmd deve essere un oggetto');
   eq(s.monarch, null);
+});
+
+test('scegliere un colore già preso lo scambia', () => {
+  const s = L.newGame(4, 40);
+  const before = s.players[0].color;
+  const target = s.players[2].color;
+  L.setColor(s, 0, target);
+  eq(s.players[0].color, target, 'nuovo colore:');
+  eq(s.players[2].color, before, "l'altro prende il vecchio:");
+  eq(new Set(s.players.map(p => p.color)).size, 4, 'colori distinti:');
+});
+
+test('nomi e colori passano alla nuova partita, sempre distinti', () => {
+  const s = L.newGame(6, 40);
+  L.applyRoster(s, [{ name: 'Anna', color: 'G' }, { name: 'Bea', color: 'G' }, { name: 'Ciro', color: 'U' }]);
+  eq(s.players[0].name, 'Anna', 'nome:');
+  eq(s.players[0].color, 'G', 'colore:');
+  eq(s.players[1].name, 'Bea', 'nome anche se il colore è doppio:');
+  eq(s.players[3].name, 'Giocatore 4', 'posto nuovo:');
+  eq(new Set(s.players.map(p => p.color)).size, 6, 'colori distinti:');
+  L.applyRoster(s, 'spazzatura'); // salvataggio corrotto: nessun effetto
+  eq(s.players[0].name, 'Anna', 'roster non valido ignorato:');
 });
 
 test('resetScores riporta tutto a inizio partita', () => {
